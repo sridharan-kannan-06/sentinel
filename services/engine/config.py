@@ -17,6 +17,11 @@ class Settings:
     engine_base_url: str
     evidence_gate: str
     git_sha: str
+    notifier: str
+    notify_from: str
+    notify_to: str
+    notify_sheet_id: str
+    gmail_oauth_secret: str
 
     @property
     def evidence_gate_enabled(self) -> bool:
@@ -39,4 +44,11 @@ def get_settings() -> Settings:
         engine_base_url=os.environ.get("ENGINE_BASE_URL", "").rstrip("/"),
         evidence_gate=os.environ.get("EVIDENCE_GATE", "on"),
         git_sha=os.environ.get("GIT_SHA", "unknown"),
+        # Google Chat incoming webhooks need a Workspace account, so the
+        # delivery channel here is email or a shared sheet. See notify.py.
+        notifier=os.environ.get("NOTIFIER", "log"),
+        notify_from=os.environ.get("NOTIFY_FROM", ""),
+        notify_to=os.environ.get("NOTIFY_TO", ""),
+        notify_sheet_id=os.environ.get("NOTIFY_SHEET_ID", ""),
+        gmail_oauth_secret=os.environ.get("GMAIL_OAUTH_SECRET", "gmail-oauth"),
     )

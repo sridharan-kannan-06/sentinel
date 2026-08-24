@@ -7,19 +7,26 @@ in later phases and all of them write status through `ledger.transition`.
 
 from __future__ import annotations
 
+import base64
+import binascii
 import hashlib
+import json
 import os
 from collections.abc import AsyncIterator
 from contextlib import asynccontextmanager
 from pathlib import Path
 
 from fastapi import FastAPI, HTTPException, Request
+from pydantic import BaseModel
 
+import interpreter
 import ledger
 import logs
+import notify
 import timers
 from config import get_settings
 from models import (
+    CheckpointKind,
     IllegalTransition,
     ObligationCreate,
     ObligationStatus,
@@ -168,23 +175,181 @@ def wake(payload: WakePayload, request: Request) -> dict:
         )
         return {"obligation_id": obligation.id, "status": obligation.status.value, "acted": False}
 
-    ledger.record_entry(
+    kind = payload.checkpoint_kind
+
+    # The checkpoint decides the target status. A nudge means the obligation is
+    # at risk, a breach means the deadline passed, and an escalation does not
+    # move the status because the obligation is already breached; it widens the
+    # audience instead.
+    target = {
+        CheckpointKind.NUDGE: ObligationStatus.AT_RISK,
+        CheckpointKind.BREACH: ObligationStatus.BREACHED,
+        CheckpointKind.ESCALATE: obligation.status,
+    }[kind]
+
+    audience = {
+        CheckpointKind.NUDGE: obligation.owner_id,
+        CheckpointKind.BREACH: f"{obligation.owner_id} and the department coordinator",
+        CheckpointKind.ESCALATE: "the supervisor",
+    }[kind]
+
+    settings = get_settings()
+    notifier = notify.get_notifier()
+    recipient = settings.notify_to or obligation.owner_id
+    subject = (
+        f"[Sentinel] {kind.value.upper()} on {obligation.type} for {obligation.subject_token}"
+    )
+    body = (
+        f"Obligation {obligation.id} is {kind.value} at "
+        f"{payload.scheduled_for.isoformat()}.\n\n"
+        f"Type: {obligation.type}\n"
+        f"Subject: {obligation.subject_token}\n"
+        f"Owner: {obligation.owner_role} ({obligation.owner_id})\n"
+        f"Deadline: {obligation.deadline.isoformat()}\n"
+        f"Opened: {obligation.created_at.isoformat()}\n\n"
+        f"This will close only when the following is produced:\n"
+        f"  {obligation.required_evidence}\n\n"
+        f"Sentinel proposes and chases. It does not decide clinical matters.\n"
+    )
+
+    reference: str | None = None
+    try:
+        reference = notifier.send(
+            notify.Notification(
+                to=recipient,
+                subject=subject,
+                body=body,
+                obligation_id=obligation.id,
+                kind=kind.value,
+                trace_id=trace_id,
+            )
+        )
+    except notify.NotifierError as exc:
+        # Failing to reach a person must not stop the state change. The
+        # obligation is still at risk whether or not the email went out.
+        logs.error(
+            "notification failed but the checkpoint still fired",
+            obligation_id=obligation.id,
+            checkpoint=kind.value,
+            error=str(exc),
+            trace_id=trace_id,
+        )
+
+    updated = ledger.transition(
         obligation.id,
+        target=target,
         actor="system:timer",
-        action="wake.received",
-        reason=f"Checkpoint {payload.checkpoint_kind.value} scheduled for "
-        f"{payload.scheduled_for.isoformat()} fired",
+        action=f"checkpoint.{kind.value}",
+        reason=(
+            f"Checkpoint {kind.value} scheduled for {payload.scheduled_for.isoformat()} "
+            f"fired. Notified {audience} via {notifier.name}."
+        ),
+        evidence_ref=reference,
         trace_id=trace_id,
+        checkpoint_fired=kind.value,
     )
+
     logs.info(
-        "wake received",
+        "wake handled",
         obligation_id=obligation.id,
-        checkpoint=payload.checkpoint_kind.value,
+        checkpoint=kind.value,
         scheduled_for=payload.scheduled_for.isoformat(),
-        status=obligation.status.value,
+        status_before=obligation.status.value,
+        status_after=updated.status.value,
+        notifier=notifier.name,
+        notification_ref=reference,
         trace_id=trace_id,
     )
-    return {"obligation_id": obligation.id, "status": obligation.status.value, "acted": True}
+    return {
+        "obligation_id": obligation.id,
+        "status": updated.status.value,
+        "acted": True,
+        "notified": reference is not None,
+        "notification_ref": reference,
+    }
+
+
+class PubSubMessage(BaseModel):
+    data: str | None = None
+    attributes: dict[str, str] = {}
+    messageId: str | None = None
+
+
+class PubSubPush(BaseModel):
+    message: PubSubMessage
+    subscription: str | None = None
+
+
+@app.post("/interpret")
+async def interpret_event(push: PubSubPush, request: Request) -> dict:
+    """Pub/Sub push target. One de-identified event becomes obligations.
+
+    Everything arriving here has already cleared Model Armor and Sensitive Data
+    Protection at the ingest boundary; the topic carries nothing else. A message
+    that cannot be decoded is acknowledged rather than retried forever, because
+    redelivering a malformed payload will not make it parse.
+    """
+    trace_id = trace_id_from(request)
+
+    if not push.message.data:
+        logs.warning("interpret received a message with no data", trace_id=trace_id)
+        return {"accepted": 0, "rejected": 0, "reason": "empty message"}
+
+    try:
+        event = json.loads(base64.b64decode(push.message.data).decode("utf-8"))
+    except (ValueError, binascii.Error) as exc:
+        logs.error(
+            "interpret could not decode the message, acknowledging to stop redelivery",
+            error=str(exc),
+            message_id=push.message.messageId,
+            trace_id=trace_id,
+        )
+        return {"accepted": 0, "rejected": 0, "reason": "undecodable message"}
+
+    result = await interpreter.interpret(event, trace_id=trace_id)
+
+    # The exact prompt is logged because it is a demonstration beat later: it is
+    # everything the model saw, and it contains no names.
+    logs.info(
+        "interpreter prompt",
+        idempotency_key=event.get("idempotency_key"),
+        prompt=result.prompt,
+        trace_id=trace_id,
+    )
+
+    created: list[str] = []
+    for proposal in result.accepted:
+        try:
+            obligation = ledger.create_obligation(
+                proposal,
+                actor="agent:interpreter",
+                reason=f"Proposed from event {event.get('idempotency_key')}",
+                trace_id=trace_id,
+            )
+        except IllegalTransition as exc:
+            logs.error(
+                "could not admit a validated proposal",
+                idempotency_key=event.get("idempotency_key"),
+                error=str(exc),
+                trace_id=trace_id,
+            )
+            continue
+        created.append(obligation.id)
+        timers.schedule_all(obligation.id, obligation.checkpoints, trace_id)
+
+    logs.info(
+        "event interpreted",
+        idempotency_key=event.get("idempotency_key"),
+        created=created,
+        rejected=len(result.rejected),
+        trace_id=trace_id,
+    )
+    return {
+        "accepted": len(created),
+        "rejected": len(result.rejected),
+        "obligation_ids": created,
+        "rejections": [r.reason for r in result.rejected],
+    }
 
 
 @app.get("/obligations")
