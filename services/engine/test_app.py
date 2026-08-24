@@ -21,8 +21,8 @@ def test_policy_hash_reports_absent_when_no_policy_exists() -> None:
     assert main.policy_config_hash() in {"absent"} or len(main.policy_config_hash()) == 16
 
 
-def test_healthz_reports_the_global_gemini_location() -> None:
-    body = main.healthz()
+def test_health_reports_the_global_gemini_location() -> None:
+    body = main.health()
     assert body["service"] == "sentinel-engine"
     # Regional endpoints do not serve gemini-3.5-flash. If this ever reads
     # us-central1 the interpreter will fail with a confusing 404.
@@ -37,7 +37,7 @@ def test_module_imports_when_flattened_into_a_single_directory(tmp_path: Path) -
         shutil.copy(source, tmp_path / source.name)
 
     result = subprocess.run(
-        [sys.executable, "-c", "import main; main.healthz()"],
+        [sys.executable, "-c", "import main; main.health()"],
         cwd=tmp_path,
         capture_output=True,
         text=True,

@@ -88,8 +88,8 @@ def trace_id_from(request: Request) -> str | None:
     return header.split("/")[0] or None
 
 
-@app.get("/healthz")
-def healthz() -> dict:
+@app.get("/health")
+def health() -> dict:
     settings = get_settings()
     return {
         "service": "sentinel-ingest",

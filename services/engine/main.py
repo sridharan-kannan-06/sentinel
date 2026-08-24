@@ -1,8 +1,13 @@
 """Sentinel engine: the obligation ledger, its state machine, and its timers.
 
-Phase 0 scope. There is deliberately no model call anywhere in this service yet.
-The Interpreter, the Coordinator, the Policy Engine, and the Evidence Gate arrive
-in later phases and all of them write status through `ledger.transition`.
+The Interpreter runs here but cannot write: every status change in the service
+goes through `ledger.transition`, and the Coordinator, Policy Engine, and
+Evidence Gate that arrive in later phases will do the same.
+
+The health endpoint is `/health` and deliberately not `/healthz`. Google's edge
+intercepts `/healthz` on run.app hostnames and answers with its own 404 page
+before the request reaches the container, which is indistinguishable from a
+service that failed to deploy.
 """
 
 from __future__ import annotations
@@ -99,8 +104,8 @@ async def lifespan(_: FastAPI) -> AsyncIterator[None]:
 app = FastAPI(title="sentinel-engine", lifespan=lifespan)
 
 
-@app.get("/healthz")
-def healthz() -> dict:
+@app.get("/health")
+def health() -> dict:
     settings = get_settings()
     return {
         "service": "sentinel-engine",
@@ -146,8 +151,10 @@ def create_obligation(payload: ObligationCreate, request: Request) -> dict:
 def wake(payload: WakePayload, request: Request) -> dict:
     """A Cloud Task fired for one checkpoint on one obligation.
 
-    Phase 0 records the wake and marks the checkpoint fired. Deciding what the
-    wake means, nudging, and escalating arrive in Phase 1.
+    The checkpoint kind decides the status change and the audience. Delivery is
+    attempted but not required: an obligation is at risk whether or not the
+    notification reached anyone, so a failed send is recorded and the transition
+    still happens.
     """
     trace_id = trace_id_from(request)
     obligation = ledger.get_obligation(payload.obligation_id)
