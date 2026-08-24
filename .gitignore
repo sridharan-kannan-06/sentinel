@@ -1,0 +1,33 @@
+# Python
+__pycache__/
+*.py[cod]
+.venv/
+venv/
+*.egg-info/
+.pytest_cache/
+.mypy_cache/
+
+# Node
+node_modules/
+.next/
+out/
+*.tsbuildinfo
+
+# Environment and credentials
+.env
+.env.local
+*.key
+*.pem
+*-key.bin
+*-key.wrapped
+*-key.b64
+application_default_credentials.json
+service-account*.json
+client_secret*.json
+token.json
+
+# OS and editor
+.DS_Store
+Thumbs.db
+.idea/
+.vscode/
