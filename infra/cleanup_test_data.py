@@ -63,6 +63,16 @@ def main() -> int:
     for event_id in events:
         print(f"DELETE  event {event_id}")
 
+    # Approvals reference an obligation, so leaving them behind would show the
+    # queue holding decisions about work that no longer exists.
+    approvals = [
+        s.id
+        for s in db.collection("approvals").stream()
+        if (s.to_dict() or {}).get("obligation_id") != keep
+    ]
+    for approval_id in approvals:
+        print(f"DELETE  approval {approval_id}")
+
     client = tasks_v2.CloudTasksClient()
     parent = client.queue_path(PROJECT, REGION, QUEUE)
     doomed_tasks = [
@@ -94,9 +104,13 @@ def main() -> int:
     for event_id in events:
         db.collection("events").document(event_id).delete()
 
+    for approval_id in approvals:
+        db.collection("approvals").document(approval_id).delete()
+
     print(
         f"\nRemoved {len(doomed)} obligations, {len(events)} events, "
-        f"{len(doomed_tasks)} timers. Canary {keep} untouched."
+        f"{len(approvals)} approvals, {len(doomed_tasks)} timers. "
+        f"Canary {keep} untouched."
     )
     return 0
 

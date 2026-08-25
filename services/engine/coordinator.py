@@ -104,6 +104,12 @@ def build_instruction() -> str:
         "Prefer the action that would most directly produce the evidence the "
         "obligation needs to close. If the obligation is already past its "
         "deadline, prefer escalation over a further request.",
+        "",
+        "already_attempted lists what has been done on this obligation before. "
+        "Do not repeat an action that is already in it. Reading a status is "
+        "useful once; after that, choose the action that actually discharges the "
+        "obligation, even if that action needs human approval. An action parked "
+        "for approval is progress. Reading the same status a third time is not.",
     ]
     return "\n".join(lines)
 
@@ -122,6 +128,22 @@ def build_agent() -> LlmAgent:
     )
 
 
+def recent_actions(obligation_id: str, limit: int = 8) -> list[str]:
+    """What has already been tried on this obligation.
+
+    Without this the coordinator re-reads the same status on every wake and the
+    obligation never advances, because reading is always the safest-looking
+    choice. Showing the history is what turns a loop into a sequence.
+    """
+    interesting = ("acted.", "failed.", "approval.", "policy.denied", "route.")
+    actions = [
+        entry.action
+        for entry in ledger.get_ledger(obligation_id)
+        if entry.action.startswith(interesting)
+    ]
+    return actions[-limit:]
+
+
 def describe(obligation: Obligation) -> str:
     return json.dumps(
         {
@@ -136,6 +158,7 @@ def describe(obligation: Obligation) -> str:
             "opened_at": obligation.created_at.isoformat(),
             "required_evidence": obligation.required_evidence,
             "blocked_by": obligation.blocked_by,
+            "already_attempted": recent_actions(obligation.id),
         },
         indent=2,
     )
