@@ -1,0 +1,113 @@
+# Sentinel policy configuration.
+#
+# This file is the whole authority model. It is data, not code, it is versioned,
+# and its hash is logged at boot and returned with every decision so that a
+# decision can be tied to the exact policy that produced it.
+#
+# Two rules govern reading it:
+#
+# Deny by default. An action that is not in an agent's allow list is denied. An
+# action that is not declared at all is denied. There is no wildcard.
+#
+# No model is consulted. The policy engine is deterministic code. A model may
+# ask for an action; it may never influence the answer.
+
+version: 3
+effective_from: "2026-08-24"
+
+tiers:
+  T0:
+    handling: allow
+    description: Internal notification or board update. No external effect.
+  T1:
+    handling: allow
+    description: Internal task or document request. Reversible, stays inside the hospital.
+  T2:
+    handling: allow_with_approval
+    description: >
+      Leaves the organisation or reaches a patient. A named human approves the
+      exact payload before it is sent.
+  T3:
+    handling: deny
+    description: >
+      Touches a clinical record or expresses a clinical opinion. Sentinel
+      coordinates; clinicians decide.
+
+# Every action the fleet can request. An action absent from this table is denied
+# before any agent allow list is consulted.
+actions:
+  classify_obligation:        { tier: T0, resource: ledger }
+  route_obligation:           { tier: T0, resource: ledger }
+  read_ledger:                { tier: T0, resource: ledger }
+  post_board_update:          { tier: T0, resource: board }
+
+  read_lab_status:            { tier: T0, resource: clinical_status }
+  read_order_status:          { tier: T0, resource: clinical_status }
+  notify_clinician:           { tier: T0, resource: notification }
+  request_acknowledgement:    { tier: T1, resource: notification }
+  escalate_internal:          { tier: T1, resource: notification }
+
+  read_claim_status:          { tier: T0, resource: billing_status }
+  read_document_status:       { tier: T0, resource: billing_status }
+  request_internal_document:  { tier: T1, resource: document }
+  assemble_claim_packet:      { tier: T1, resource: document }
+  submit_claim:               { tier: T2, resource: external_party }
+  send_external_email:        { tier: T2, resource: external_party }
+
+  check_referral_status:      { tier: T0, resource: pathway_status }
+  check_discharge_blockers:   { tier: T0, resource: pathway_status }
+  schedule_followup:          { tier: T1, resource: scheduling }
+  message_patient:            { tier: T2, resource: patient_contact }
+
+  # Declared so that a request for one produces a specific, logged denial rather
+  # than the generic "unknown action" answer. Naming them is the point: the
+  # denial reads as a deliberate refusal, not an oversight.
+  write_clinical_record:      { tier: T3, resource: clinical_record }
+  amend_diagnosis:            { tier: T3, resource: clinical_record }
+  record_clinical_opinion:    { tier: T3, resource: clinical_record }
+  override_evidence_gate:     { tier: T3, resource: ledger }
+
+agents:
+  coordinator:
+    service_account: sentinel-engine
+    description: Routes obligations by domain. Holds no write tools and takes no external action.
+    allow:
+      - classify_obligation
+      - route_obligation
+      - read_ledger
+
+  clinical_followup:
+    service_account: sentinel-clin
+    description: Chases acknowledgement of clinical results. May never see or touch billing.
+    allow:
+      - read_ledger
+      - read_lab_status
+      - read_order_status
+      - notify_clinician
+      - request_acknowledgement
+      - escalate_internal
+      - post_board_update
+
+  revenue_cycle:
+    service_account: sentinel-rev
+    description: Chases claim documents and submits claims. May never read clinical notes.
+    allow:
+      - read_ledger
+      - read_claim_status
+      - read_document_status
+      - request_internal_document
+      - assemble_claim_packet
+      - submit_claim
+      - send_external_email
+      - post_board_update
+
+  care_pathway:
+    service_account: sentinel-path
+    description: Resolves discharge and referral dependencies. May never touch billing or clinical records.
+    allow:
+      - read_ledger
+      - check_referral_status
+      - check_discharge_blockers
+      - schedule_followup
+      - message_patient
+      - post_board_update

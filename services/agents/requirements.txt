@@ -1,0 +1,12 @@
+fastapi==0.141.1
+uvicorn[standard]==0.52.4
+pydantic==2.13.4
+pyyaml==6.0.3
+google-cloud-secret-manager==2.30.0
+google-api-python-client==2.199.0
+
+# Pinned for the same reason as the engine: a newer google-api-core
+# percent-encodes the Firestore database id and breaks every transaction.
+google-api-core==2.34.0
+google-auth==2.56.3
+googleapis-common-protos==1.75.1
