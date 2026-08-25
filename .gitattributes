@@ -1,0 +1,11 @@
+# Binary fixtures must not have line endings rewritten. Git's CRLF conversion
+# treats an unmarked .pdf as text and corrupts it on checkout, which breaks the
+# injection fixture for anyone cloning on Windows.
+*.pdf binary
+*.png binary
+*.jpg binary
+*.ico binary
+
+# Shell and PowerShell scripts keep their own endings.
+*.ps1 text eol=crlf
+*.sh  text eol=lf
