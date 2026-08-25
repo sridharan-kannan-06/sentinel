@@ -303,11 +303,27 @@ server side, so the engine URL never reaches the browser.
 
 ### Tests
 
+Each service deploys with its own `requirements.txt`, which is enough to run that
+service but not enough to run its tests. `requirements-dev.txt` pulls all three
+together and adds the runner:
+
+```bash
+python -m venv .venv
+.venv/Scripts/python.exe -m pip install -r requirements-dev.txt
+```
+
+Then, from the repository root:
+
 ```bash
 cd services/engine && python -m pytest -q
-cd services/agents && python -m pytest -q
-cd services/ingest && python -m pytest -q
+cd ../agents      && python -m pytest -q
+cd ../ingest      && python -m pytest -q
 ```
+
+Run them from inside each service directory. The modules import each other flatly
+because that is how they are laid out in the container, and `services/agents` has
+a `conftest.py` that puts the shared modules on the path the same way the deploy
+script stages them.
 
 No network and no credentials required. The tests that matter assert properties
 rather than outputs: that `CLOSED` is reachable from exactly one state, that no

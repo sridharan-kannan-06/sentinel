@@ -1,0 +1,11 @@
+# Everything needed to run every test suite from one environment.
+#
+# The three services deploy as three containers with three requirement files, but
+# the tests are meant to be run in one go from a checkout, so this pulls them
+# together and adds the test runner. Installing a service's own requirements.txt
+# is enough to run that service; it is not enough to run its tests.
+
+-r services/engine/requirements.txt
+-r services/ingest/requirements.txt
+
+pytest==9.1.1
