@@ -1,0 +1,86 @@
+{
+  "note": [
+    "Raw inbound events, one per subject. These carry names on purpose: they are",
+    "the input to the trust boundary, and the point of the fixture set is that",
+    "nothing downstream ever sees them.",
+    "",
+    "The text is written the way hospital operational messages actually read,",
+    "with the obligation implied rather than stated. An event that says 'create a",
+    "task to chase the pre-auth' would be testing nothing; the interpreter's job",
+    "is to notice the commitment nobody wrote down."
+  ],
+  "events": [
+    {
+      "idempotency_key": "fx-S01-crit-k",
+      "source": "lis",
+      "event_type": "CRITICAL_LAB_RESULT",
+      "text": "Critical potassium 6.8 mmol/L for Meena Raghavan, MRN 4471902. Result released 40 minutes ago. Ordering clinician Dr. Anil Kumar has not opened the result."
+    },
+    {
+      "idempotency_key": "fx-S02-crit-trop",
+      "source": "lis",
+      "event_type": "CRITICAL_LAB_RESULT",
+      "text": "Troponin I 2.41 ng/mL for Farhan Qureshi, MRN 4471915, admitted under Dr. Priya Menon in cardiology. Flagged critical by the analyser. No acknowledgement recorded."
+    },
+    {
+      "idempotency_key": "fx-S03-crit-creat",
+      "source": "lis",
+      "event_type": "CRITICAL_LAB_RESULT",
+      "text": "Creatinine 5.9 mg/dL for Lakshmi Narayanan, MRN 4471928, a rise from 2.1 yesterday. Dr. Anil Kumar was paged; nothing has come back."
+    },
+    {
+      "idempotency_key": "fx-S04-crit-hb",
+      "source": "lis",
+      "event_type": "CRITICAL_LAB_RESULT",
+      "text": "Haemoglobin 5.8 g/dL for Joseph Mathew, MRN 4471933, under Dr. Rekha Iyer. Repeat sample confirms. Ward has not been called back."
+    },
+    {
+      "idempotency_key": "fx-S05-preauth",
+      "source": "ops-console",
+      "event_type": "ADMISSION_REQUIRING_PREAUTH",
+      "text": "Sunitha Devi, MRN 4471947, admitted for elective caesarean under Dr. Priya Menon. Insurer is Star Health, policy needs pre-authorisation before the procedure. Nothing submitted yet."
+    },
+    {
+      "idempotency_key": "fx-S06-preauth",
+      "source": "ops-console",
+      "event_type": "ADMISSION_REQUIRING_PREAUTH",
+      "text": "Ramesh Pillai, MRN 4471952, listed for total knee replacement by Dr. Vikram Shah on Thursday. TPA pre-authorisation not raised. Surgery is in three days."
+    },
+    {
+      "idempotency_key": "fx-S07-preauth",
+      "source": "insurer-email",
+      "event_type": "INSURER_QUERY",
+      "text": "From the TPA desk regarding Anjali Bhatt, MRN 4471964: we cannot process the pre-authorisation without the treating consultant's clinical justification note. Dr. Rekha Iyer to provide."
+    },
+    {
+      "idempotency_key": "fx-S08-doc-chase",
+      "source": "insurer-email",
+      "event_type": "CLAIM_DOCUMENT_REQUEST",
+      "text": "Claim for Ibrahim Sheikh, MRN 4471978, is on hold. The discharge summary and the implant sticker sheet from Dr. Vikram Shah's procedure are both missing from the submission."
+    },
+    {
+      "idempotency_key": "fx-S09-doc-chase",
+      "source": "billing-system",
+      "event_type": "CLAIM_DOCUMENT_REQUEST",
+      "text": "Kavitha Subramanian, MRN 4471983, discharged four days ago under Dr. Priya Menon. The final bill has not been uploaded to the insurer portal and the claim window closes in ten days."
+    },
+    {
+      "idempotency_key": "fx-S10-discharge",
+      "source": "his",
+      "event_type": "DISCHARGE_INITIATED",
+      "text": "Discharge initiated for Deepak Choudhury, MRN 4471996, by Dr. Anil Kumar. Pharmacy reconciliation is still open and the take-home prescription has not been signed."
+    },
+    {
+      "idempotency_key": "fx-S11-discharge",
+      "source": "his",
+      "event_type": "DISCHARGE_INITIATED",
+      "text": "Nithya Balakrishnan, MRN 4472004, is medically fit for discharge per Dr. Rekha Iyer. Physiotherapy sign-off and the dietician note are both outstanding and the bed is needed."
+    },
+    {
+      "idempotency_key": "fx-S12-referral",
+      "source": "ops-console",
+      "event_type": "REFERRAL_CREATED",
+      "text": "Dr. Vikram Shah referred Gopal Venkatesh, MRN 4472018, to the spine clinic at the tertiary centre. The referral went out on Monday and no acknowledgement has come back."
+    }
+  ]
+}

@@ -59,7 +59,15 @@ def main() -> int:
         doomed.append(snapshot.id)
         print(f"DELETE  {snapshot.id}  {record.get('status')}  {record.get('type')}")
 
-    events = [s.id for s in db.collection("events").stream()]
+    # Events named demo- are kept. The blocked injection record in particular is
+    # a demonstration artefact: it is the audit entry shown on screen, and
+    # recreating it means posting the injection again.
+    events = []
+    for snapshot in db.collection("events").stream():
+        if snapshot.id.startswith("demo-"):
+            print(f"KEEP    event {snapshot.id}  demo artefact")
+            continue
+        events.append(snapshot.id)
     for event_id in events:
         print(f"DELETE  event {event_id}")
 

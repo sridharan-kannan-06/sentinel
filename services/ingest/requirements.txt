@@ -6,3 +6,12 @@ google-cloud-pubsub==2.39.1
 google-cloud-dlp==3.38.0
 google-cloud-modelarmor==0.7.1
 google-cloud-secret-manager==2.30.0
+
+# Pinned for the same reason as the engine: a newer google-api-core
+# percent-encodes the Firestore database id, so every transaction fails at
+# runtime with "400 Invalid database id %28default%29" while the same code works
+# locally. The rollback path then masks it with a second error about a missing
+# transaction id.
+google-api-core==2.34.0
+google-auth==2.56.3
+googleapis-common-protos==1.75.1

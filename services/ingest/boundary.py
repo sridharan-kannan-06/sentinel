@@ -32,12 +32,37 @@ SURROGATE = re.compile(r"([A-Z_]+)\((\d+)\):([A-Za-z0-9+/=]+)")
 CLINICIAN_PATTERN = r"(?:Dr\.?|Doctor|Consultant)\s+[A-Z][a-z]+(?:\s+[A-Z][a-z]+)*"
 
 
+# Model Armor's prompt injection detection weakens as the injection is diluted by
+# surrounding legitimate text. Measured against fixtures/injection_claim.txt: the
+# injected paragraph alone (320 characters) is blocked, and the identical
+# paragraph inside a plausible 1318 character insurer letter is not. Screening
+# that letter in windows finds it at 300 characters per window and misses it at
+# 400 and at 600.
+#
+# So long documents are screened whole and again in overlapping windows, and a
+# match in any window blocks the document. The overlap matters: an injection
+# straddling a boundary would otherwise be split into halves that each look
+# harmless.
+#
+# This is a mitigation and not a guarantee. An injection spread thinly enough
+# would still pass, which is why it is not what the system relies on. What
+# actually prevents an injected instruction from closing an obligation is
+# structural: the interpreter holds no tools, closure is not an action any agent
+# can request, and the Evidence Gate requires an authoritative external fact that
+# no document can talk its way past.
+WINDOW_CHARS = 300
+WINDOW_OVERLAP = 150
+WINDOW_THRESHOLD = 700
+
+
 @dataclass
 class ScreeningResult:
     blocked: bool
     match_state: str
     reason: str | None = None
     filters: dict[str, str] = field(default_factory=dict)
+    windows_screened: int = 1
+    matched_window: str | None = None
 
 
 @dataclass
@@ -94,7 +119,52 @@ PREFIX_FOR = {
 }
 
 
+def windows(text: str) -> list[str]:
+    """Overlapping slices of a long document, or the document itself if short."""
+    if len(text) <= WINDOW_THRESHOLD:
+        return [text]
+    step = WINDOW_CHARS - WINDOW_OVERLAP
+    slices = [text[start : start + WINDOW_CHARS] for start in range(0, len(text), step)]
+    return [s for s in slices if s.strip()]
+
+
 def _screen(text: str) -> ScreeningResult:
+    """Screen the whole document, and long ones window by window as well.
+
+    Screening the whole document first means a short payload costs one call. A
+    long one costs one per window on top, which is the price of not being fooled
+    by an injection buried in three paragraphs of real correspondence.
+    """
+    whole = _screen_once(text)
+    if whole.blocked or len(text) <= WINDOW_THRESHOLD:
+        return whole
+
+    slices = windows(text)
+    for index, chunk in enumerate(slices):
+        result = _screen_once(chunk)
+        if result.blocked:
+            return ScreeningResult(
+                blocked=True,
+                match_state=result.match_state,
+                reason=(
+                    f"{result.reason} Detected in window {index + 1} of "
+                    f"{len(slices)}; the document as a whole did not trigger the "
+                    f"filter, which is what a diluted injection looks like."
+                ),
+                filters=result.filters,
+                windows_screened=len(slices) + 1,
+                matched_window=chunk.strip()[:400],
+            )
+
+    return ScreeningResult(
+        blocked=False,
+        match_state=whole.match_state,
+        filters=whole.filters,
+        windows_screened=len(slices) + 1,
+    )
+
+
+def _screen_once(text: str) -> ScreeningResult:
     settings = get_settings()
     template = (
         f"projects/{settings.project_id}/locations/{settings.region}"

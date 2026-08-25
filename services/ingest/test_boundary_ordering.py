@@ -79,3 +79,32 @@ def test_surrogate_pattern_matches_what_sdp_emits() -> None:
     raw = "DR(44):AbC+/= reviewed for PT(44):XyZ==, MRN MRN(32):QqQ"
     found = boundary.SURROGATE.findall(raw)
     assert [f[0] for f in found] == ["DR", "PT", "MRN"]
+
+
+def test_a_short_document_is_screened_once() -> None:
+    """Windowing costs an API call per window, so it only applies where needed."""
+    assert boundary.windows("a short note") == ["a short note"]
+
+
+def test_a_long_document_is_split_into_overlapping_windows() -> None:
+    text = "x" * 2000
+    slices = boundary.windows(text)
+    assert len(slices) > 1
+    assert all(len(s) <= boundary.WINDOW_CHARS for s in slices)
+
+
+def test_windows_overlap_so_an_injection_cannot_hide_on_a_boundary() -> None:
+    """Without overlap, a payload straddling a split becomes two harmless halves."""
+    text = "".join(str(i % 10) for i in range(2000))
+    slices = boundary.windows(text)
+    step = boundary.WINDOW_CHARS - boundary.WINDOW_OVERLAP
+    assert step < boundary.WINDOW_CHARS
+    # Consecutive windows share their overlap region.
+    assert slices[0][step:] == slices[1][: boundary.WINDOW_CHARS - step]
+
+
+def test_every_character_of_the_document_appears_in_some_window() -> None:
+    text = "".join(chr(97 + i % 26) for i in range(1500))
+    covered = "".join(boundary.windows(text))
+    for index in range(0, len(text), 97):
+        assert text[index : index + 20] in covered

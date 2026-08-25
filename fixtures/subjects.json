@@ -1,0 +1,110 @@
+{
+  "note": [
+    "Twelve subjects, not a hundred. Every one is invented and every one is",
+    "traceable through the system end to end. A dashboard showing a hundred",
+    "fabricated workflows is worse than one showing twelve real ones, because a",
+    "judge who clicks a hollow row stops believing the rest of the screen.",
+    "",
+    "These names exist only in this file. They are the input to the trust",
+    "boundary, which replaces them with tokens before anything reaches a model.",
+    "Nothing downstream of ingest has ever seen them."
+  ],
+  "subjects": [
+    {
+      "ref": "S01",
+      "name": "Meena Raghavan",
+      "mrn": "4471902",
+      "clinician": "Dr. Anil Kumar",
+      "department": "General Medicine",
+      "workflow": "critical_result_acknowledgement"
+    },
+    {
+      "ref": "S02",
+      "name": "Farhan Qureshi",
+      "mrn": "4471915",
+      "clinician": "Dr. Priya Menon",
+      "department": "Cardiology",
+      "workflow": "critical_result_acknowledgement"
+    },
+    {
+      "ref": "S03",
+      "name": "Lakshmi Narayanan",
+      "mrn": "4471928",
+      "clinician": "Dr. Anil Kumar",
+      "department": "Nephrology",
+      "workflow": "critical_result_acknowledgement"
+    },
+    {
+      "ref": "S04",
+      "name": "Joseph Mathew",
+      "mrn": "4471933",
+      "clinician": "Dr. Rekha Iyer",
+      "department": "General Medicine",
+      "workflow": "critical_result_acknowledgement"
+    },
+    {
+      "ref": "S05",
+      "name": "Sunitha Devi",
+      "mrn": "4471947",
+      "clinician": "Dr. Priya Menon",
+      "department": "Obstetrics",
+      "workflow": "insurance_preauthorisation"
+    },
+    {
+      "ref": "S06",
+      "name": "Ramesh Pillai",
+      "mrn": "4471952",
+      "clinician": "Dr. Vikram Shah",
+      "department": "Orthopaedics",
+      "workflow": "insurance_preauthorisation"
+    },
+    {
+      "ref": "S07",
+      "name": "Anjali Bhatt",
+      "mrn": "4471964",
+      "clinician": "Dr. Rekha Iyer",
+      "department": "General Surgery",
+      "workflow": "insurance_preauthorisation"
+    },
+    {
+      "ref": "S08",
+      "name": "Ibrahim Sheikh",
+      "mrn": "4471978",
+      "clinician": "Dr. Vikram Shah",
+      "department": "Orthopaedics",
+      "workflow": "claim_document_chase"
+    },
+    {
+      "ref": "S09",
+      "name": "Kavitha Subramanian",
+      "mrn": "4471983",
+      "clinician": "Dr. Priya Menon",
+      "department": "Cardiology",
+      "workflow": "claim_document_chase"
+    },
+    {
+      "ref": "S10",
+      "name": "Deepak Choudhury",
+      "mrn": "4471996",
+      "clinician": "Dr. Anil Kumar",
+      "department": "General Medicine",
+      "workflow": "discharge_blocker"
+    },
+    {
+      "ref": "S11",
+      "name": "Nithya Balakrishnan",
+      "mrn": "4472004",
+      "clinician": "Dr. Rekha Iyer",
+      "department": "General Surgery",
+      "workflow": "discharge_blocker"
+    },
+    {
+      "ref": "S12",
+      "name": "Gopal Venkatesh",
+      "mrn": "4472018",
+      "clinician": "Dr. Vikram Shah",
+      "department": "Orthopaedics",
+      "workflow": "referral_followup"
+    }
+  ]
+}

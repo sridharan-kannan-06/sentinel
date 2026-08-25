@@ -11,9 +11,11 @@ from datetime import datetime, timedelta, timezone
 
 import pytest
 from interpreter import (
+    KNOWN_OBLIGATION_TYPES,
     MAX_SLA_HOURS,
     RISK_TIER_FOR,
     ObligationProposal,
+    build_agent,
     build_prompt,
     checkpoints_for,
     validate_proposal,
@@ -143,3 +145,31 @@ def test_every_known_type_has_a_derived_tier(obligation_type: str) -> None:
     assert reason is None
     assert create is not None
     assert create.risk_tier in {RiskTier.T0, RiskTier.T1, RiskTier.T2}
+
+
+def test_the_interpreter_holds_no_tools() -> None:
+    """An injection that reaches the model still finds nothing to operate.
+
+    This is the property the boundary is not allowed to be the only defence for.
+    Model Armor's detection weakens as an injection is diluted by surrounding
+    legitimate text, so the system must survive one getting through.
+    """
+    assert build_agent().tools == []
+
+
+def test_closure_is_not_in_the_interpreter_vocabulary() -> None:
+    """It can propose obligations. It has no way to express closing one."""
+    for obligation_type in KNOWN_OBLIGATION_TYPES:
+        assert "close" not in obligation_type
+        assert "approve" not in obligation_type
+    assert len(KNOWN_OBLIGATION_TYPES) == 5
+
+
+def test_an_injected_instruction_cannot_become_an_obligation_type() -> None:
+    """The vocabulary is closed, so an invented type is rejected rather than run."""
+    for invented in ("mark_claim_approved", "close_obligation", "administrator_mode"):
+        create, reason = validate_proposal(
+            proposal(obligation_type=invented), EVENT, NOW
+        )
+        assert create is None
+        assert "unknown obligation type" in reason

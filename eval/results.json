@@ -1,0 +1,30 @@
+{
+  "run_at": "2026-08-25T04:36:55Z",
+  "git_sha": "5bb0012",
+  "engine": "https://sentinel-engine-sqr3nw6srq-uc.a.run.app",
+  "model": "gemini-3.5-flash",
+  "detection": {
+    "denominator": 12,
+    "detected": 12,
+    "detection_rate": 1.0,
+    "undetected": [],
+    "median_seconds_to_detection": 5.5793325,
+    "max_seconds_to_detection": 11.095713,
+    "min_seconds_to_detection": 0.198297,
+    "sla_seconds": 90,
+    "obligation_ids": [
+      "OBL-f109572ef4",
+      "OBL-8207df6b85",
+      "OBL-9cbbebc60c",
+      "OBL-984389b78d",
+      "OBL-04254fce02",
+      "OBL-28c664d1c8",
+      "OBL-39cf704500",
+      "OBL-01c1fce389",
+      "OBL-cb17ca46c9",
+      "OBL-e38940c574",
+      "OBL-dfc4609877",
+      "OBL-c7514bd102"
+    ]
+  }
+}
