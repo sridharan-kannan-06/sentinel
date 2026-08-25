@@ -122,6 +122,10 @@ class LedgerEntry(BaseModel):
     reason: str
     evidence_ref: str | None = None
     policy_decision_id: str | None = None
+    # Who was contacted, when this entry records a notification. The escalation
+    # rate limit counts these, so it has to be a field rather than prose in the
+    # reason.
+    recipient: str | None = None
     trace_id: str | None = None
     at: datetime = Field(default_factory=utcnow)
 

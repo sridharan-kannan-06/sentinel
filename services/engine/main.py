@@ -1,8 +1,9 @@
 """Sentinel engine: the obligation ledger, its state machine, and its timers.
 
-The Interpreter runs here but cannot write: every status change in the service
-goes through `ledger.transition`, and the Coordinator, Policy Engine, and
-Evidence Gate that arrive in later phases will do the same.
+The Interpreter, the Coordinator, the Policy Engine, and the Evidence Gate all
+run here, and none of them writes an obligation's status directly. Every status
+change goes through `ledger.transition`, which is the only function permitted to
+touch that field, and CLOSED is reachable from exactly one predecessor.
 
 The health endpoint is `/health` and deliberately not `/healthz`. Google's edge
 intercepts `/healthz` on run.app hostnames and answers with its own 404 page
@@ -17,15 +18,18 @@ import binascii
 import json
 from collections.abc import AsyncIterator
 from contextlib import asynccontextmanager
+from datetime import datetime, timezone
 
 from fastapi import FastAPI, HTTPException, Request
 from pydantic import BaseModel
 
+import approvals
 import coordinator
+import escalation
+import evidence as evidence_gate
 import interpreter
 import ledger
 import logs
-import notify
 import policy
 import timers
 from config import get_settings
@@ -170,15 +174,6 @@ def wake(payload: WakePayload, request: Request) -> dict:
         CheckpointKind.ESCALATE: obligation.status,
     }[kind]
 
-    audience = {
-        CheckpointKind.NUDGE: obligation.owner_id,
-        CheckpointKind.BREACH: f"{obligation.owner_id} and the department coordinator",
-        CheckpointKind.ESCALATE: "the supervisor",
-    }[kind]
-
-    settings = get_settings()
-    notifier = notify.get_notifier()
-    recipient = settings.notify_to or obligation.owner_id
     subject = (
         f"[Sentinel] {kind.value.upper()} on {obligation.type} for {obligation.subject_token}"
     )
@@ -195,28 +190,17 @@ def wake(payload: WakePayload, request: Request) -> dict:
         f"Sentinel proposes and chases. It does not decide clinical matters.\n"
     )
 
-    reference: str | None = None
-    try:
-        reference = notifier.send(
-            notify.Notification(
-                to=recipient,
-                subject=subject,
-                body=body,
-                obligation_id=obligation.id,
-                kind=kind.value,
-                trace_id=trace_id,
-            )
-        )
-    except notify.NotifierError as exc:
-        # Failing to reach a person must not stop the state change. The
-        # obligation is still at risk whether or not the email went out.
-        logs.error(
-            "notification failed but the checkpoint still fired",
-            obligation_id=obligation.id,
-            checkpoint=kind.value,
-            error=str(exc),
-            trace_id=trace_id,
-        )
+    # The ladder decides who hears about this and the rate limit decides whether
+    # they hear about it again. Both are configuration, and both are counted from
+    # the ledger, so neither resets when this service scales to zero.
+    outcome = escalation.notify_rung(obligation, kind, subject, body, trace_id=trace_id)
+
+    delivered = ", ".join(outcome["delivered"]) or "nobody"
+    suppressed = (
+        f" Suppressed by the rate limit: {', '.join(outcome['suppressed'])}."
+        if outcome["suppressed"]
+        else ""
+    )
 
     updated = ledger.transition(
         obligation.id,
@@ -225,9 +209,9 @@ def wake(payload: WakePayload, request: Request) -> dict:
         action=f"checkpoint.{kind.value}",
         reason=(
             f"Checkpoint {kind.value} scheduled for {payload.scheduled_for.isoformat()} "
-            f"fired. Notified {audience} via {notifier.name}."
+            f"fired. Notified {delivered} via {outcome['notifier']}.{suppressed}"
         ),
-        evidence_ref=reference,
+        evidence_ref=outcome["references"][0] if outcome["references"] else None,
         trace_id=trace_id,
         checkpoint_fired=kind.value,
     )
@@ -239,16 +223,19 @@ def wake(payload: WakePayload, request: Request) -> dict:
         scheduled_for=payload.scheduled_for.isoformat(),
         status_before=obligation.status.value,
         status_after=updated.status.value,
-        notifier=notifier.name,
-        notification_ref=reference,
+        roles=outcome["roles"],
+        delivered=outcome["delivered"],
+        suppressed=outcome["suppressed"],
+        failed=outcome["failed"],
         trace_id=trace_id,
     )
     return {
         "obligation_id": obligation.id,
         "status": updated.status.value,
         "acted": True,
-        "notified": reference is not None,
-        "notification_ref": reference,
+        "delivered": outcome["delivered"],
+        "suppressed": outcome["suppressed"],
+        "failed": outcome["failed"],
     }
 
 
@@ -396,3 +383,226 @@ def policy_summary() -> dict:
             for role in sorted(policy.known_agents())
         },
     }
+
+
+class EvidenceSubmission(BaseModel):
+    source: str
+    external_reference: str
+    observed_at: datetime
+    subject_token: str
+    assertion: str
+
+
+@app.post("/obligations/{obligation_id}/evidence")
+def submit_evidence(
+    obligation_id: str, submission: EvidenceSubmission, request: Request
+) -> dict:
+    """Offer a fact that may close an obligation.
+
+    The obligation moves to PENDING_EVIDENCE first, so the attempt is on the
+    record whether or not it succeeds. Only a verdict from the gate can then move
+    it to CLOSED, and CLOSED has no other legal predecessor.
+    """
+    trace_id = trace_id_from(request)
+    obligation = ledger.get_obligation(obligation_id)
+    if obligation is None:
+        raise HTTPException(status_code=404, detail="obligation not found")
+    if obligation.status in {
+        ObligationStatus.CLOSED,
+        ObligationStatus.REJECTED,
+        ObligationStatus.CANCELLED,
+    }:
+        raise HTTPException(
+            status_code=409, detail=f"obligation is already {obligation.status.value}"
+        )
+
+    fact = evidence_gate.Evidence(**submission.model_dump())
+    verdict = evidence_gate.evaluate(obligation, fact)
+
+    if obligation.status is not ObligationStatus.PENDING_EVIDENCE:
+        obligation = ledger.transition(
+            obligation_id,
+            target=ObligationStatus.PENDING_EVIDENCE,
+            actor="system:evidence",
+            action="evidence.submitted",
+            reason=(
+                f"Evidence offered from {fact.source!r} with reference "
+                f"{fact.external_reference!r}."
+            ),
+            evidence_ref=verdict.evidence_hash,
+            trace_id=trace_id,
+        )
+
+    for check in verdict.checks:
+        ledger.record_entry(
+            obligation_id,
+            actor="system:evidence",
+            action="evidence.check.passed" if check.passed else "evidence.check.failed",
+            reason=f"{check.name}: {check.detail}",
+            evidence_ref=verdict.evidence_hash,
+            trace_id=trace_id,
+        )
+
+    if not verdict.accepted:
+        logs.warning(
+            "evidence rejected",
+            obligation_id=obligation_id,
+            summary=verdict.summary,
+            evidence_hash=verdict.evidence_hash,
+            trace_id=trace_id,
+        )
+        return {
+            "obligation_id": obligation_id,
+            "accepted": False,
+            "status": ObligationStatus.PENDING_EVIDENCE.value,
+            "gate_enabled": verdict.gate_enabled,
+            "summary": verdict.summary,
+            "checks": [c.model_dump() for c in verdict.checks],
+            "evidence_hash": verdict.evidence_hash,
+        }
+
+    gate_note = (
+        ""
+        if verdict.gate_enabled
+        else " EVIDENCE GATE WAS OFF: this closed without qualifying evidence."
+    )
+    closed = ledger.transition(
+        obligation_id,
+        target=ObligationStatus.CLOSED,
+        actor="system:evidence",
+        action="obligation.closed",
+        reason=(
+            f"{verdict.summary}. Closed on {fact.source!r} reference "
+            f"{fact.external_reference!r}.{gate_note}"
+        ),
+        evidence_ref=verdict.evidence_hash,
+        trace_id=trace_id,
+    )
+    logs.info(
+        "obligation closed on evidence",
+        obligation_id=obligation_id,
+        gate_enabled=verdict.gate_enabled,
+        evidence_hash=verdict.evidence_hash,
+        source=fact.source,
+        trace_id=trace_id,
+    )
+    return {
+        "obligation_id": obligation_id,
+        "accepted": True,
+        "status": closed.status.value,
+        "gate_enabled": verdict.gate_enabled,
+        "summary": verdict.summary,
+        "checks": [c.model_dump() for c in verdict.checks],
+        "evidence_hash": verdict.evidence_hash,
+    }
+
+
+@app.post("/reconcile")
+def reconcile(request: Request, limit: int = 50) -> dict:
+    """Repair obligations whose next checkpoint passed without firing.
+
+    Cloud Tasks can drop a task silently, so the obligation rather than the timer
+    is the source of truth. The sweep re-derives the checkpoint from the
+    obligation and re-arms it, which is why losing a timer costs one sweep
+    interval rather than the whole obligation.
+    """
+    trace_id = trace_id_from(request)
+    now = datetime.now(timezone.utc)
+    repaired: list[dict] = []
+    examined = 0
+
+    for obligation in ledger.overdue_checkpoints(now, limit=limit):
+        examined += 1
+        checkpoint = obligation.next_checkpoint
+        if checkpoint is None:
+            continue
+
+        attempt = ledger.count_entries(obligation.id, "sweep.repaired") + 1
+        task = timers.schedule_checkpoint(
+            obligation.id, checkpoint, attempt=attempt, trace_id=trace_id
+        )
+        ledger.record_entry(
+            obligation.id,
+            actor="system:sweep",
+            action="sweep.repaired",
+            reason=(
+                f"Checkpoint {checkpoint.kind.value} was due at "
+                f"{checkpoint.at.isoformat()} and had not fired. The sweep re-armed it "
+                f"as attempt {attempt}. The timer was lost; the obligation was not."
+            ),
+            evidence_ref=task,
+            trace_id=trace_id,
+        )
+        repaired.append(
+            {
+                "obligation_id": obligation.id,
+                "checkpoint": checkpoint.kind.value,
+                "due_at": checkpoint.at.isoformat(),
+                "attempt": attempt,
+                "task": task,
+            }
+        )
+        logs.warning(
+            "sweep repaired a missed checkpoint",
+            obligation_id=obligation.id,
+            checkpoint=checkpoint.kind.value,
+            due_at=checkpoint.at.isoformat(),
+            attempt=attempt,
+            trace_id=trace_id,
+        )
+
+    logs.info(
+        "reconciliation sweep complete",
+        examined=examined,
+        repaired=len(repaired),
+        trace_id=trace_id,
+    )
+    return {"examined": examined, "repaired": len(repaired), "details": repaired}
+
+
+@app.get("/approvals")
+def list_approvals(limit: int = 100) -> dict:
+    pending = approvals.list_pending(limit=limit)
+    return {
+        "count": len(pending),
+        "approvals": [a.model_dump(mode="json") for a in pending],
+    }
+
+
+@app.get("/approvals/{approval_id}")
+def get_approval(approval_id: str) -> dict:
+    found = approvals.get(approval_id)
+    if found is None:
+        raise HTTPException(status_code=404, detail="approval not found")
+    return found.model_dump(mode="json")
+
+
+def _decide_approval(
+    approval_id: str, approved: bool, decision: approvals.Decision, request: Request
+) -> dict:
+    trace_id = trace_id_from(request)
+    try:
+        result = approvals.decide(approval_id, approved, decision, trace_id=trace_id)
+    except KeyError as exc:
+        raise HTTPException(status_code=404, detail=str(exc)) from exc
+    except approvals.AlreadyDecided as exc:
+        raise HTTPException(status_code=409, detail=str(exc)) from exc
+    logs.info(
+        "approval decided",
+        approval_id=approval_id,
+        obligation_id=result.obligation_id,
+        approved=approved,
+        decided_by=decision.decided_by,
+        trace_id=trace_id,
+    )
+    return result.model_dump(mode="json")
+
+
+@app.post("/approvals/{approval_id}/approve")
+def approve(approval_id: str, decision: approvals.Decision, request: Request) -> dict:
+    return _decide_approval(approval_id, True, decision, request)
+
+
+@app.post("/approvals/{approval_id}/deny")
+def deny(approval_id: str, decision: approvals.Decision, request: Request) -> dict:
+    return _decide_approval(approval_id, False, decision, request)

@@ -19,6 +19,7 @@ from pydantic import BaseModel
 
 from config import get_settings
 from models import (
+    TERMINAL_STATUSES,
     Checkpoint,
     IllegalTransition,
     LedgerEntry,
@@ -202,6 +203,7 @@ def record_entry(
     evidence_ref: str | None = None,
     policy_decision_id: str | None = None,
     trace_id: str | None = None,
+    recipient: str | None = None,
 ) -> LedgerEntry:
     """Append history without changing status. Used for wakes and observations."""
     entry = LedgerEntry(
@@ -210,6 +212,7 @@ def record_entry(
         reason=reason,
         evidence_ref=evidence_ref,
         policy_decision_id=policy_decision_id,
+        recipient=recipient,
         trace_id=trace_id,
     )
     ref = client().collection(OBLIGATIONS).document(obligation_id)
@@ -234,6 +237,39 @@ def list_obligations(limit: int = 100) -> list[Obligation]:
         .limit(limit)
     )
     return [Obligation.model_validate(doc.to_dict()) for doc in query.stream()]
+
+
+def overdue_checkpoints(now: datetime, limit: int = 50) -> list[Obligation]:
+    """Obligations whose next checkpoint is in the past and has not fired.
+
+    Firestore will not combine an inequality on next_checkpoint with a not-in
+    filter on status in one query, so the status filter is applied here. The
+    range query is the selective one, so the difference does not matter at this
+    size.
+    """
+    query = (
+        client()
+        .collection(OBLIGATIONS)
+        .where(filter=firestore.FieldFilter("next_checkpoint", "<=", now))
+        .order_by("next_checkpoint")
+        .limit(limit)
+    )
+    overdue: list[Obligation] = []
+    for document in query.stream():
+        record = document.to_dict() or {}
+        # A null next_checkpoint sorts before every timestamp and would otherwise
+        # be swept every single time.
+        if record.get("next_checkpoint") is None:
+            continue
+        obligation = Obligation.model_validate(record)
+        if obligation.status in TERMINAL_STATUSES:
+            continue
+        overdue.append(obligation)
+    return overdue
+
+
+def count_entries(obligation_id: str, action: str) -> int:
+    return sum(1 for entry in get_ledger(obligation_id) if entry.action == action)
 
 
 def get_ledger(obligation_id: str) -> list[LedgerEntry]:

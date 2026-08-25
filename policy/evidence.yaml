@@ -1,0 +1,58 @@
+# What counts as proof that an obligation was discharged.
+#
+# Kept separate from policy.yaml because it answers a different question. Policy
+# decides who may act; this decides what closes an obligation. Both are hashed
+# and both are shown in the trust panel, but changing one should not invalidate
+# a decision made under the other.
+#
+# Nothing here is advisory. The Evidence Gate is deterministic code that reads
+# this file, and a model has no way to influence any of it.
+
+version: 1
+
+defaults:
+  acceptance_window_hours: 168
+  minimum_reference_length: 4
+
+obligation_types:
+  critical_result_acknowledgement:
+    # Only a system that actually records acknowledgement can prove it happened.
+    # A clinician saying "I saw it" in an email is not on this list on purpose.
+    authoritative_sources:
+      - lis
+      - emr_acknowledgement_log
+      - clinician_ack_portal
+    acceptance_window_hours: 72
+    assertion_keywords: [acknowledg, reviewed, signed, noted]
+
+  insurance_preauthorisation:
+    authoritative_sources:
+      - insurer_portal
+      - insurer_email
+      - tpa_desk
+    acceptance_window_hours: 336
+    assertion_keywords: [pre-auth, preauth, authoris, authoriz, approved, reference]
+
+  claim_document_chase:
+    authoritative_sources:
+      - document_management_system
+      - insurer_portal
+      - billing_system
+    acceptance_window_hours: 336
+    assertion_keywords: [uploaded, received, attached, submitted, document]
+
+  discharge_blocker:
+    authoritative_sources:
+      - pharmacy_system
+      - his_discharge_module
+      - billing_system
+    acceptance_window_hours: 168
+    assertion_keywords: [reconcil, cleared, signed, completed, resolved]
+
+  referral_followup:
+    authoritative_sources:
+      - referral_system
+      - specialist_response
+      - appointment_system
+    acceptance_window_hours: 336
+    assertion_keywords: [confirmed, scheduled, appointment, accepted, declined]

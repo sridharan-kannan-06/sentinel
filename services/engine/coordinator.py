@@ -23,6 +23,7 @@ from google.adk.agents import LlmAgent
 from google.adk.runners import InMemoryRunner
 from pydantic import BaseModel, Field, ValidationError
 
+import approvals
 import ledger
 import logs
 import policy
@@ -51,6 +52,7 @@ class CoordinationResult(BaseModel):
     detail: str = ""
     policy_decision_id: str | None = None
     external_ref: str | None = None
+    approval_id: str | None = None
 
 
 def summarise(body: str, limit: int = 160) -> str:
@@ -281,21 +283,32 @@ async def coordinate(obligation: Obligation, trace_id: str | None = None) -> Coo
         )
 
     if decision.needs_approval:
-        ledger.record_entry(
-            obligation.id,
-            actor="agent:coordinator",
-            action="approval.required",
-            reason=f"{choice.action!r} by {choice.agent!r} is tier {decision.tier} and "
-            f"is parked for human approval rather than performed.",
+        # Park the exact request that would have been dispatched, so the person
+        # approving reads the real payload rather than a description of it.
+        outbound = {
+            "obligation": obligation.model_dump(mode="json"),
+            "action": choice.action,
+            "payload": {},
+            "policy_decision_id": decision.decision_id,
+        }
+        request = approvals.create(
+            obligation_id=obligation.id,
+            agent=choice.agent,
+            action=choice.action,
+            risk_tier=decision.tier or "unknown",
+            payload=outbound,
+            rendered_payload=json.dumps(outbound, indent=2),
             policy_decision_id=decision.decision_id,
+            policy_hash=decision.policy_hash,
             trace_id=trace_id,
         )
         return CoordinationResult(
             agent=choice.agent,
             action=choice.action,
             outcome="requires_approval",
-            detail=decision.reason,
+            detail=f"{decision.reason} Parked as {request.id}.",
             policy_decision_id=decision.decision_id,
+            approval_id=request.id,
         )
 
     ok, detail, external_ref = await dispatch(

@@ -1,0 +1,49 @@
+# Who hears about an obligation, and how often.
+#
+# Rate limits are here because an agent that cannot be annoying is an agent
+# people leave switched on. Two notifications per person per obligation per day
+# is enough to be useful and few enough not to be ignored, and the count is kept
+# in the ledger rather than in memory so that scaling to zero, restarting, or
+# running two instances cannot reset it.
+
+version: 1
+
+defaults:
+  max_notifications_per_recipient_per_24h: 2
+  ladder:
+    nudge: [owner]
+    breach: [owner, department_coordinator]
+    escalate: [supervisor]
+
+obligation_types:
+  critical_result_acknowledgement:
+    # A clinical result nobody has acknowledged is the one case where reaching
+    # further up is warranted rather than merely noisy.
+    ladder:
+      nudge: [owner]
+      breach: [owner, department_coordinator]
+      escalate: [supervisor, medical_director]
+
+  insurance_preauthorisation:
+    ladder:
+      nudge: [owner]
+      breach: [owner, billing_coordinator]
+      escalate: [revenue_cycle_supervisor]
+
+  claim_document_chase:
+    ladder:
+      nudge: [owner]
+      breach: [owner, billing_coordinator]
+      escalate: [revenue_cycle_supervisor]
+
+  discharge_blocker:
+    ladder:
+      nudge: [owner]
+      breach: [owner, ward_coordinator]
+      escalate: [discharge_supervisor]
+
+  referral_followup:
+    ladder:
+      nudge: [owner]
+      breach: [owner, referral_coordinator]
+      escalate: [outpatient_supervisor]

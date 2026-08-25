@@ -57,8 +57,12 @@ Get-ChildItem "$RepoRoot\services\$SourceDir" -File |
   Where-Object { $_.Name -notlike "test_*" } |
   ForEach-Object { Copy-Item $_.FullName $stage -Force }
 
-# The policy file travels with every service that enforces it.
-Copy-Item "$RepoRoot\policy\policy.yaml" $stage -Force
+# Every configuration file travels with the services that enforce it: policy.yaml
+# for authority, evidence.yaml for what counts as proof, escalation.yaml for who
+# hears about it. Copying only policy.yaml leaves the Evidence Gate with no rules,
+# which it correctly reports by refusing to close anything at all.
+Get-ChildItem "$RepoRoot\policy" -Filter *.yaml -File |
+  ForEach-Object { Copy-Item $_.FullName $stage -Force }
 
 if ($IsAgent) {
   # The engine holds the canonical copies. Staging them here rather than keeping
