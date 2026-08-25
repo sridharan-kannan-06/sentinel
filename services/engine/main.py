@@ -14,20 +14,19 @@ from __future__ import annotations
 
 import base64
 import binascii
-import hashlib
 import json
-import os
 from collections.abc import AsyncIterator
 from contextlib import asynccontextmanager
-from pathlib import Path
 
 from fastapi import FastAPI, HTTPException, Request
 from pydantic import BaseModel
 
+import coordinator
 import interpreter
 import ledger
 import logs
 import notify
+import policy
 import timers
 from config import get_settings
 from models import (
@@ -38,38 +37,14 @@ from models import (
     WakePayload,
 )
 
-def policy_path() -> Path | None:
-    """Locate policy.yaml in both the repo checkout and the container image.
-
-    In the repo the file sits two levels up at policy/policy.yaml; in the image
-    the service is flattened into /app, where indexing a fixed number of parents
-    walks off the end of the path. Search the parents that actually exist.
-    """
-    override = os.environ.get("POLICY_PATH")
-    if override:
-        candidate = Path(override)
-        return candidate if candidate.exists() else None
-
-    here = Path(__file__).resolve()
-    candidates = [here.parent / "policy.yaml"]
-    candidates += [parent / "policy" / "policy.yaml" for parent in here.parents]
-    for candidate in candidates:
-        if candidate.exists():
-            return candidate
-    return None
-
 
 def policy_config_hash() -> str:
-    """Hash of the policy config, logged at boot and surfaced in the trust panel.
+    """Hash of the policy that is actually in force, for the trust panel.
 
-    The policy engine lands in Phase 2. Until the file exists this reports
-    "absent" rather than a hash of nothing, so the UI never shows a hash that
-    corresponds to no policy.
+    Delegated to the policy module so the hash shown in the UI is the same one
+    the policy engine used to decide, not a second reading of the file.
     """
-    path = policy_path()
-    if path is None:
-        return "absent"
-    return hashlib.sha256(path.read_bytes()).hexdigest()[:16]
+    return policy.policy_hash()
 
 
 def trace_id_from(request: Request) -> str | None:
@@ -111,6 +86,7 @@ def health() -> dict:
         "service": "sentinel-engine",
         "git_sha": settings.git_sha,
         "policy_config_hash": policy_config_hash(),
+        "policy_version": policy.policy_version(),
         "evidence_gate": "on" if settings.evidence_gate_enabled else "off",
         "gemini_model": settings.gemini_model,
         "gemini_location": settings.gemini_location,
@@ -377,4 +353,46 @@ def get_obligation(obligation_id: str) -> dict:
     return {
         "obligation": obligation.model_dump(mode="json"),
         "ledger": [e.model_dump(mode="json") for e in entries],
+    }
+
+
+@app.post("/coordinate/{obligation_id}")
+async def coordinate(obligation_id: str, request: Request) -> dict:
+    """Route one obligation to the department that owes its next move.
+
+    Always returns 200 for an obligation that exists, including when routing
+    failed or policy refused. Those are outcomes the ledger records, not
+    transport errors, and reporting them as failures would make a policy denial
+    look like an outage.
+    """
+    trace_id = trace_id_from(request)
+    obligation = ledger.get_obligation(obligation_id)
+    if obligation is None:
+        raise HTTPException(status_code=404, detail="obligation not found")
+
+    if obligation.status in {
+        ObligationStatus.CLOSED,
+        ObligationStatus.REJECTED,
+        ObligationStatus.CANCELLED,
+    }:
+        return {
+            "obligation_id": obligation_id,
+            "outcome": "settled",
+            "detail": f"Obligation is already {obligation.status.value}",
+        }
+
+    result = await coordinator.coordinate(obligation, trace_id=trace_id)
+    return {"obligation_id": obligation_id, **result.model_dump(mode="json")}
+
+
+@app.get("/policy")
+def policy_summary() -> dict:
+    """The authority model as the running service sees it."""
+    return {
+        "policy_hash": policy.policy_hash(),
+        "policy_version": policy.policy_version(),
+        "agents": {
+            role: sorted(policy.allowed_actions(role))
+            for role in sorted(policy.known_agents())
+        },
     }

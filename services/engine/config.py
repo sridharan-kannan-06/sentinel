@@ -22,6 +22,9 @@ class Settings:
     notify_to: str
     notify_sheet_id: str
     gmail_oauth_secret: str
+    agent_clin_url: str
+    agent_rev_url: str
+    agent_path_url: str
 
     @property
     def evidence_gate_enabled(self) -> bool:
@@ -51,4 +54,9 @@ def get_settings() -> Settings:
         notify_to=os.environ.get("NOTIFY_TO", ""),
         notify_sheet_id=os.environ.get("NOTIFY_SHEET_ID", ""),
         gmail_oauth_secret=os.environ.get("GMAIL_OAUTH_SECRET", "gmail-oauth"),
+        # One image is deployed three times, so the fleet is three URLs
+        # rather than one service with a role parameter.
+        agent_clin_url=os.environ.get("AGENT_CLIN_URL", "").rstrip("/"),
+        agent_rev_url=os.environ.get("AGENT_REV_URL", "").rstrip("/"),
+        agent_path_url=os.environ.get("AGENT_PATH_URL", "").rstrip("/"),
     )

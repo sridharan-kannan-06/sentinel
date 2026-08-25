@@ -19,6 +19,26 @@ from typing import Any
 
 import logs
 import notify
+from config import get_settings
+
+
+def resolve_recipient(obligation: dict, payload: dict) -> str:
+    """Turn an obligation owner into something a mail server will accept.
+
+    owner_id is a role identifier such as STAFF-billing-01, not an address. A
+    real deployment resolves it against the hospital directory; here it falls
+    back to the configured operator address, because handing Gmail a role
+    identifier fails with an unhelpful "Invalid To header".
+    """
+    for candidate in (payload.get("to"), get_settings().notify_to):
+        if candidate and "@" in candidate:
+            return candidate
+    owner = obligation.get("owner_id", "")
+    if "@" in owner:
+        return owner
+    raise notify.NotifierError(
+        f"No deliverable address for owner {owner!r}. Set NOTIFY_TO or supply one."
+    )
 
 
 @dataclass
@@ -44,8 +64,8 @@ def tool(action: str) -> Callable[[ToolFn], ToolFn]:
 
 def _notify(obligation: dict, payload: dict, subject: str, body: str) -> ToolResult:
     notifier = notify.get_notifier()
-    recipient = payload.get("to") or obligation.get("owner_id", "unknown")
     try:
+        recipient = resolve_recipient(obligation, payload)
         reference = notifier.send(
             notify.Notification(
                 to=recipient,
