@@ -16,6 +16,7 @@ to route is still an obligation.
 from __future__ import annotations
 
 import json
+import re
 
 import httpx
 from google.adk.agents import LlmAgent
@@ -50,6 +51,20 @@ class CoordinationResult(BaseModel):
     detail: str = ""
     policy_decision_id: str | None = None
     external_ref: str | None = None
+
+
+def summarise(body: str, limit: int = 160) -> str:
+    """Reduce an error body to one readable line.
+
+    An unreachable Cloud Run service answers with an HTML error page, and
+    pasting that into the ledger buries the actual reason under markup. The
+    ledger is read by people.
+    """
+    text = re.sub(r"<[^>]+>", " ", body or "")
+    text = " ".join(text.split())
+    if not text:
+        return "empty response"
+    return text if len(text) <= limit else text[: limit - 3] + "..."
 
 
 def agent_url(role: str) -> str | None:
@@ -190,7 +205,7 @@ async def dispatch(
                     data.get("summary") or data.get("reason") or data.get("status", ""),
                     data.get("external_ref"),
                 )
-            last = f"agent returned HTTP {response.status_code}: {response.text[:200]}"
+            last = f"agent returned HTTP {response.status_code}: {summarise(response.text)}"
         except httpx.TimeoutException:
             last = f"agent did not respond within {DISPATCH_TIMEOUT_SECONDS:.0f}s"
         except httpx.HTTPError as exc:
