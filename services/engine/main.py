@@ -33,6 +33,7 @@ import ledger
 import logs
 import policy
 import timers
+import tracing
 from config import get_settings
 from models import (
     CheckpointKind,
@@ -61,8 +62,9 @@ def trace_id_from(request: Request) -> str | None:
 
 
 @asynccontextmanager
-async def lifespan(_: FastAPI) -> AsyncIterator[None]:
+async def lifespan(instance: FastAPI) -> AsyncIterator[None]:
     settings = get_settings()
+    tracing.setup(instance)
     logs.info(
         "engine starting",
         service="sentinel-engine",

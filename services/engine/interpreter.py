@@ -27,6 +27,7 @@ from google.adk.runners import InMemoryRunner
 from pydantic import BaseModel, Field, ValidationError
 
 import logs
+import tracing
 from config import get_settings
 from models import Checkpoint, CheckpointKind, ObligationCreate, RiskTier
 
@@ -240,6 +241,11 @@ async def interpret(event: dict, trace_id: str | None = None) -> InterpretResult
     result = InterpretResult(prompt=prompt)
 
     try:
+        tracing.annotate(
+            idempotency_key=event.get("idempotency_key"),
+            event_type=event.get("event_type"),
+            tokens=",".join(event.get("tokens", [])),
+        )
         runner = InMemoryRunner(agent=build_agent(), app_name="sentinel")
         session_id = f"interpret-{event.get('idempotency_key', 'adhoc')}"
         events = await runner.run_debug(

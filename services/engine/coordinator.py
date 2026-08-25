@@ -27,6 +27,7 @@ import approvals
 import ledger
 import logs
 import policy
+import tracing
 from config import get_settings
 from models import Obligation
 
@@ -248,7 +249,15 @@ async def dispatch(
 
 
 async def coordinate(obligation: Obligation, trace_id: str | None = None) -> CoordinationResult:
-    choice = await choose_route(obligation, trace_id)
+    with tracing.span(
+        "coordinator.route",
+        obligation_id=obligation.id,
+        obligation_type=obligation.type,
+        status=obligation.status.value,
+    ):
+        choice = await choose_route(obligation, trace_id)
+        if choice is not None:
+            tracing.annotate(chose_agent=choice.agent, chose_action=choice.action)
 
     if choice is None:
         ledger.record_entry(
@@ -276,7 +285,14 @@ async def coordinate(obligation: Obligation, trace_id: str | None = None) -> Coo
             outcome="route_rejected", detail=f"unknown agent {choice.agent!r}"
         )
 
-    decision = policy.decide(choice.agent, choice.action, obligation_id=obligation.id)
+    with tracing.span(
+        "policy.decide",
+        obligation_id=obligation.id,
+        agent=choice.agent,
+        action=choice.action,
+    ):
+        decision = policy.decide(choice.agent, choice.action, obligation_id=obligation.id)
+        tracing.annotate(outcome=decision.outcome.value, decision_id=decision.decision_id)
 
     if not decision.permitted:
         ledger.record_entry(
@@ -334,9 +350,16 @@ async def coordinate(obligation: Obligation, trace_id: str | None = None) -> Coo
             approval_id=request.id,
         )
 
-    ok, detail, external_ref = await dispatch(
-        choice.agent, obligation, choice.action, decision.decision_id, trace_id
-    )
+    with tracing.span(
+        "agent.dispatch",
+        obligation_id=obligation.id,
+        agent=choice.agent,
+        action=choice.action,
+    ):
+        ok, detail, external_ref = await dispatch(
+            choice.agent, obligation, choice.action, decision.decision_id, trace_id
+        )
+        tracing.annotate(executed=ok, external_ref=external_ref)
 
     ledger.record_entry(
         obligation.id,

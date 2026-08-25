@@ -1,0 +1,179 @@
+{
+  "displayName": "Sentinel Continuity",
+  "mosaicLayout": {
+    "columns": 12,
+    "tiles": [
+      {
+        "xPos": 0, "yPos": 0, "width": 4, "height": 4,
+        "widget": {
+          "title": "Obligations admitted",
+          "xyChart": {
+            "chartOptions": { "mode": "COLOR" },
+            "dataSets": [{
+              "plotType": "STACKED_BAR",
+              "targetAxis": "Y1",
+              "timeSeriesQuery": {
+                "timeSeriesFilter": {
+                  "filter": "metric.type=\"logging.googleapis.com/user/sentinel_obligations_created\"",
+                  "aggregation": { "alignmentPeriod": "3600s", "perSeriesAligner": "ALIGN_SUM", "crossSeriesReducer": "REDUCE_SUM" }
+                }
+              }
+            }]
+          }
+        }
+      },
+      {
+        "xPos": 4, "yPos": 0, "width": 4, "height": 4,
+        "widget": {
+          "title": "Checkpoints fired: the system waking on its own",
+          "xyChart": {
+            "chartOptions": { "mode": "COLOR" },
+            "dataSets": [{
+              "plotType": "STACKED_BAR",
+              "targetAxis": "Y1",
+              "timeSeriesQuery": {
+                "timeSeriesFilter": {
+                  "filter": "metric.type=\"logging.googleapis.com/user/sentinel_checkpoints_fired\"",
+                  "aggregation": { "alignmentPeriod": "3600s", "perSeriesAligner": "ALIGN_SUM", "crossSeriesReducer": "REDUCE_SUM" }
+                }
+              }
+            }]
+          }
+        }
+      },
+      {
+        "xPos": 8, "yPos": 0, "width": 4, "height": 4,
+        "widget": {
+          "title": "Obligations closed on evidence",
+          "xyChart": {
+            "chartOptions": { "mode": "COLOR" },
+            "dataSets": [{
+              "plotType": "STACKED_BAR",
+              "targetAxis": "Y1",
+              "timeSeriesQuery": {
+                "timeSeriesFilter": {
+                  "filter": "metric.type=\"logging.googleapis.com/user/sentinel_obligations_closed\"",
+                  "aggregation": { "alignmentPeriod": "3600s", "perSeriesAligner": "ALIGN_SUM", "crossSeriesReducer": "REDUCE_SUM" }
+                }
+              }
+            }]
+          }
+        }
+      },
+      {
+        "xPos": 0, "yPos": 4, "width": 4, "height": 4,
+        "widget": {
+          "title": "Actions blocked by policy",
+          "xyChart": {
+            "chartOptions": { "mode": "COLOR" },
+            "dataSets": [{
+              "plotType": "STACKED_BAR",
+              "targetAxis": "Y1",
+              "timeSeriesQuery": {
+                "timeSeriesFilter": {
+                  "filter": "metric.type=\"logging.googleapis.com/user/sentinel_policy_denials\"",
+                  "aggregation": { "alignmentPeriod": "3600s", "perSeriesAligner": "ALIGN_SUM", "crossSeriesReducer": "REDUCE_SUM" }
+                }
+              }
+            }]
+          }
+        }
+      },
+      {
+        "xPos": 4, "yPos": 4, "width": 4, "height": 4,
+        "widget": {
+          "title": "Closures refused by the Evidence Gate",
+          "xyChart": {
+            "chartOptions": { "mode": "COLOR" },
+            "dataSets": [{
+              "plotType": "STACKED_BAR",
+              "targetAxis": "Y1",
+              "timeSeriesQuery": {
+                "timeSeriesFilter": {
+                  "filter": "metric.type=\"logging.googleapis.com/user/sentinel_evidence_rejections\"",
+                  "aggregation": { "alignmentPeriod": "3600s", "perSeriesAligner": "ALIGN_SUM", "crossSeriesReducer": "REDUCE_SUM" }
+                }
+              }
+            }]
+          }
+        }
+      },
+      {
+        "xPos": 8, "yPos": 4, "width": 4, "height": 4,
+        "widget": {
+          "title": "Payloads blocked at the trust boundary",
+          "xyChart": {
+            "chartOptions": { "mode": "COLOR" },
+            "dataSets": [{
+              "plotType": "STACKED_BAR",
+              "targetAxis": "Y1",
+              "timeSeriesQuery": {
+                "timeSeriesFilter": {
+                  "filter": "metric.type=\"logging.googleapis.com/user/sentinel_boundary_blocks\"",
+                  "aggregation": { "alignmentPeriod": "3600s", "perSeriesAligner": "ALIGN_SUM", "crossSeriesReducer": "REDUCE_SUM" }
+                }
+              }
+            }]
+          }
+        }
+      },
+      {
+        "xPos": 0, "yPos": 8, "width": 4, "height": 4,
+        "widget": {
+          "title": "Escalations issued",
+          "xyChart": {
+            "chartOptions": { "mode": "COLOR" },
+            "dataSets": [{
+              "plotType": "STACKED_BAR",
+              "targetAxis": "Y1",
+              "timeSeriesQuery": {
+                "timeSeriesFilter": {
+                  "filter": "metric.type=\"logging.googleapis.com/user/sentinel_escalations\"",
+                  "aggregation": { "alignmentPeriod": "3600s", "perSeriesAligner": "ALIGN_SUM", "crossSeriesReducer": "REDUCE_SUM" }
+                }
+              }
+            }]
+          }
+        }
+      },
+      {
+        "xPos": 4, "yPos": 8, "width": 4, "height": 4,
+        "widget": {
+          "title": "Timers lost and recovered by the sweep",
+          "xyChart": {
+            "chartOptions": { "mode": "COLOR" },
+            "dataSets": [{
+              "plotType": "STACKED_BAR",
+              "targetAxis": "Y1",
+              "timeSeriesQuery": {
+                "timeSeriesFilter": {
+                  "filter": "metric.type=\"logging.googleapis.com/user/sentinel_sweep_repairs\"",
+                  "aggregation": { "alignmentPeriod": "3600s", "perSeriesAligner": "ALIGN_SUM", "crossSeriesReducer": "REDUCE_SUM" }
+                }
+              }
+            }]
+          }
+        }
+      },
+      {
+        "xPos": 8, "yPos": 8, "width": 4, "height": 4,
+        "widget": {
+          "title": "Re-identifications: every time a token became a name",
+          "xyChart": {
+            "chartOptions": { "mode": "COLOR" },
+            "dataSets": [{
+              "plotType": "STACKED_BAR",
+              "targetAxis": "Y1",
+              "timeSeriesQuery": {
+                "timeSeriesFilter": {
+                  "filter": "metric.type=\"logging.googleapis.com/user/sentinel_reidentifications\"",
+                  "aggregation": { "alignmentPeriod": "3600s", "perSeriesAligner": "ALIGN_SUM", "crossSeriesReducer": "REDUCE_SUM" }
+                }
+              }
+            }]
+          }
+        }
+      }
+    ]
+  }
+}
