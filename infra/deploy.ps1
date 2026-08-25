@@ -2,6 +2,8 @@
 #
 #   infra/deploy.ps1 -Service engine
 #   infra/deploy.ps1 -Service ingest
+#   infra/deploy.ps1 -Service reid       re-identification, closed to the internet
+#   infra/deploy.ps1 -Service web        the Continuity Board
 #   infra/deploy.ps1 -Service clin     ClinicalFollowUpAgent
 #   infra/deploy.ps1 -Service rev      RevenueCycleAgent
 #   infra/deploy.ps1 -Service path     CarePathwayAgent
@@ -17,7 +19,7 @@
 
 param(
   [Parameter(Mandatory = $true)]
-  [ValidateSet("engine", "ingest", "clin", "rev", "path")]
+  [ValidateSet("engine", "ingest", "reid", "web", "clin", "rev", "path")]
   [string]$Service
 )
 
@@ -33,6 +35,7 @@ $AGENT_ROLES = @{
   "path" = "care_pathway"
 }
 $IsAgent   = $AGENT_ROLES.ContainsKey($Service)
+$IsWeb     = $Service -eq "web"
 $SourceDir = if ($IsAgent) { "agents" } else { $Service }
 $NAME      = "sentinel-$Service"
 $SA        = "sentinel-$Service@$PROJECT_ID.iam.gserviceaccount.com"
@@ -48,6 +51,11 @@ Get-Content $envFile | ForEach-Object {
 $gitSha = (git -C $RepoRoot rev-parse --short HEAD)
 if (-not $gitSha) { $gitSha = "unknown" }
 
+if ($IsWeb) {
+  # The board builds from its own directory. It has no policy to enforce and no
+  # shared Python modules, so there is nothing to stage.
+  $stage = "$RepoRoot\web"
+} else {
 Write-Host "Staging the build directory for $NAME"
 $stage = Join-Path $env:TEMP "sentinel-build-$Service"
 if (Test-Path $stage) { Remove-Item $stage -Recurse -Force }
@@ -63,6 +71,8 @@ Get-ChildItem "$RepoRoot\services\$SourceDir" -File |
 # which it correctly reports by refusing to close anything at all.
 Get-ChildItem "$RepoRoot\policy" -Filter *.yaml -File |
   ForEach-Object { Copy-Item $_.FullName $stage -Force }
+
+}
 
 if ($IsAgent) {
   # The engine holds the canonical copies. Staging them here rather than keeping
@@ -108,6 +118,18 @@ if ($Service -eq "engine") {
     "ENGINE_BASE_URL=$($cfg['ENGINE_BASE_URL'])"
   )
   $memory = "512Mi"
+} elseif ($IsWeb) {
+  $pairs = @(
+    "ENGINE_BASE_URL=$($cfg['ENGINE_BASE_URL'])",
+    "REID_BASE_URL=$($cfg['REID_BASE_URL'])"
+  )
+  $memory = "1Gi"
+} elseif ($Service -eq "reid") {
+  $pairs = $common + @(
+    "KMS_KEY=$($cfg['KMS_KEY'])",
+    "WRAPPED_KEY_SECRET=$($cfg['WRAPPED_KEY_SECRET'])"
+  )
+  $memory = "512Mi"
 } else {
   $pairs = $common + @(
     "PUBSUB_TOPIC=$($cfg['PUBSUB_TOPIC'])",
@@ -119,8 +141,13 @@ if ($Service -eq "engine") {
 }
 $envArg = $pairs -join ","
 
-Write-Host "Deploying $NAME as $SA. A source deploy runs Cloud Build and takes"
-Write-Host "three to five minutes. Do not interrupt it."
+# Every service except reid is public and holds nothing worth reading. reid
+# holds the only path from a token back to a name, so it is reachable only by
+# the Continuity Board's identity.
+$authFlag = if ($Service -eq "reid") { "--no-allow-unauthenticated" } else { "--allow-unauthenticated" }
+
+Write-Host "Deploying $NAME as $SA ($authFlag). A source deploy runs Cloud Build"
+Write-Host "and takes three to five minutes. Do not interrupt it."
 
 gcloud run deploy $NAME `
   --source $stage `
@@ -132,7 +159,7 @@ gcloud run deploy $NAME `
   --memory=$memory `
   --cpu=1 `
   --timeout=300 `
-  --allow-unauthenticated `
+  $authFlag `
   --set-env-vars=$envArg `
   --quiet
 
@@ -166,6 +193,8 @@ switch ($Service) {
     SetEnvValue "ENGINE_BASE_URL" $url
   }
   "ingest" { SetEnvValue "INGEST_BASE_URL" $url }
+  "reid"   { SetEnvValue "REID_BASE_URL" $url }
+  "web"    { SetEnvValue "WEB_BASE_URL" $url }
   "clin"   { SetEnvValue "AGENT_CLIN_URL" $url }
   "rev"    { SetEnvValue "AGENT_REV_URL" $url }
   "path"   { SetEnvValue "AGENT_PATH_URL" $url }

@@ -34,6 +34,13 @@ from config import get_settings
 
 EVENTS = "events"
 
+# Alias to Sensitive Data Protection surrogate. Kept in its own collection so
+# that services/reid can look one up by alias without being able to read events,
+# and so that IAM can be scoped to this collection alone. The surrogate is
+# ciphertext: reversing it still needs the KMS-wrapped key, which only reid and
+# ingest can reach.
+TOKEN_ALIASES = "token_aliases"
+
 _firestore: firestore.Client | None = None
 _publisher: pubsub_v1.PublisherClient | None = None
 
@@ -97,6 +104,31 @@ def health() -> dict:
         "model_armor_template": settings.model_armor_template,
         "pubsub_topic": settings.pubsub_topic,
     }
+
+
+def _record_aliases(aliases: dict[str, str], idempotency_key: str) -> None:
+    """Store alias to surrogate, one document per alias.
+
+    Tokenisation is deterministic, so the same person yields the same alias every
+    time and this is an idempotent upsert rather than an append. first_seen is
+    written once; last_seen moves.
+    """
+    now = utcnow()
+    for alias, surrogate in aliases.items():
+        ref = db().collection(TOKEN_ALIASES).document(alias)
+        record = {
+            "alias": alias,
+            "surrogate": surrogate,
+            "kind": alias.split("-", 1)[0],
+            "last_seen": now,
+            "last_event": idempotency_key,
+        }
+        # first_seen is written only when the alias is new. Merging it every time
+        # would move it forward on each sighting and erase the evidence that this
+        # token has meant the same person since the first event.
+        if not ref.get().exists:
+            record["first_seen"] = now
+        ref.set(record, merge=True)
 
 
 def _claim(key: str, event: RawEvent) -> dict | None:
@@ -179,6 +211,11 @@ def ingest_event(event: RawEvent, request: Request) -> dict:
             "filters": screening.filters,
             "published": False,
         }
+
+    # Persist the alias map before publishing. A token that reached an agent but
+    # cannot be resolved back for an authorised human is worse than useless: it
+    # is an audit trail nobody can read.
+    _record_aliases(deidentified.aliases, key)
 
     settings = get_settings()
     payload = {

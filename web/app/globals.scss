@@ -1,0 +1,193 @@
+@use "@carbon/react/scss/themes" as themes;
+@use "@carbon/react/scss/theme" with ($theme: themes.$g100);
+@use "@carbon/react";
+@use "@carbon/react/scss/spacing" as *;
+@use "@carbon/react/scss/type" as *;
+
+// Gray 100. This is an operations console, not a product page: dense, calm, and
+// legible at video resolution. No gradients, no rounded pills, no accent colour
+// that is not carrying information.
+:root {
+  color-scheme: dark;
+}
+
+html,
+body {
+  background: var(--cds-background);
+  color: var(--cds-text-primary);
+  margin: 0;
+  padding: 0;
+}
+
+// Every number on this screen is compared against another number, so they are
+// tabular and monospaced. A time to breach that jitters as digits change is
+// harder to read at a glance than one that does not.
+.numeric {
+  font-family: "IBM Plex Mono", "Courier New", monospace;
+  font-variant-numeric: tabular-nums;
+  white-space: nowrap;
+}
+
+.token {
+  font-family: "IBM Plex Mono", "Courier New", monospace;
+  letter-spacing: 0.02em;
+}
+
+.page {
+  padding: $spacing-07 $spacing-07 $spacing-09;
+  max-width: 1600px;
+  margin: 0 auto;
+}
+
+.page-header {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: $spacing-05;
+  flex-wrap: wrap;
+  margin-bottom: $spacing-06;
+}
+
+.page-title {
+  @include type-style("productive-heading-04");
+  margin: 0;
+}
+
+.page-subtitle {
+  @include type-style("body-compact-01");
+  color: var(--cds-text-secondary);
+  margin: $spacing-02 0 0;
+}
+
+.trust-strip {
+  display: flex;
+  gap: $spacing-06;
+  flex-wrap: wrap;
+  padding: $spacing-04 $spacing-05;
+  border: 1px solid var(--cds-border-subtle-01);
+  background: var(--cds-layer-01);
+  margin-bottom: $spacing-06;
+}
+
+.trust-item {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+
+.trust-label {
+  @include type-style("label-01");
+  color: var(--cds-text-secondary);
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+}
+
+.trust-value {
+  @include type-style("body-compact-01");
+  font-family: "IBM Plex Mono", monospace;
+}
+
+.detail-grid {
+  display: grid;
+  grid-template-columns: minmax(0, 2fr) minmax(0, 1fr);
+  gap: $spacing-06;
+  align-items: start;
+}
+
+@media (max-width: 1056px) {
+  .detail-grid {
+    grid-template-columns: minmax(0, 1fr);
+  }
+}
+
+.panel {
+  border: 1px solid var(--cds-border-subtle-01);
+  background: var(--cds-layer-01);
+  padding: $spacing-05;
+  margin-bottom: $spacing-05;
+}
+
+.panel-title {
+  @include type-style("productive-heading-01");
+  margin: 0 0 $spacing-04;
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+  color: var(--cds-text-secondary);
+}
+
+.answer {
+  @include type-style("body-01");
+  border-left: 3px solid var(--cds-support-warning);
+  padding-left: $spacing-05;
+  margin: 0;
+}
+
+.answer.clear {
+  border-left-color: var(--cds-support-success);
+}
+
+.timeline {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+}
+
+.timeline-row {
+  display: grid;
+  grid-template-columns: 180px 190px 1fr;
+  gap: $spacing-05;
+  padding: $spacing-03 0;
+  border-bottom: 1px solid var(--cds-border-subtle-00);
+  @include type-style("body-compact-01");
+}
+
+@media (max-width: 800px) {
+  .timeline-row {
+    grid-template-columns: minmax(0, 1fr);
+    gap: $spacing-02;
+  }
+}
+
+.timeline-when {
+  font-family: "IBM Plex Mono", monospace;
+  color: var(--cds-text-secondary);
+  white-space: nowrap;
+}
+
+.timeline-actor {
+  font-family: "IBM Plex Mono", monospace;
+  color: var(--cds-text-secondary);
+}
+
+.timeline-what {
+  color: var(--cds-text-primary);
+}
+
+.payload {
+  font-family: "IBM Plex Mono", monospace;
+  font-size: 12px;
+  line-height: 1.5;
+  background: var(--cds-layer-02);
+  border: 1px solid var(--cds-border-subtle-01);
+  padding: $spacing-04;
+  overflow-x: auto;
+  white-space: pre;
+  margin: 0;
+}
+
+.check-row {
+  display: flex;
+  gap: $spacing-04;
+  align-items: flex-start;
+  padding: $spacing-03 0;
+  border-bottom: 1px solid var(--cds-border-subtle-00);
+  @include type-style("body-compact-01");
+}
+
+.scroll-x {
+  overflow-x: auto;
+}
+
+.muted {
+  color: var(--cds-text-secondary);
+}

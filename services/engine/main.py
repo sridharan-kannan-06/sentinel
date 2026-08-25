@@ -24,6 +24,7 @@ from fastapi import FastAPI, HTTPException, Request
 from pydantic import BaseModel
 
 import approvals
+import audit
 import coordinator
 import escalation
 import evidence as evidence_gate
@@ -606,3 +607,53 @@ def approve(approval_id: str, decision: approvals.Decision, request: Request) ->
 @app.post("/approvals/{approval_id}/deny")
 def deny(approval_id: str, decision: approvals.Decision, request: Request) -> dict:
     return _decide_approval(approval_id, False, decision, request)
+
+
+@app.get("/board")
+def board(limit: int = 100, include_closed: bool = False) -> dict:
+    """Open obligations ordered by risk of breach rather than by deadline."""
+    rows = audit.board(limit=limit, include_closed=include_closed)
+    return {
+        "count": len(rows),
+        "generated_at": datetime.now(timezone.utc).isoformat(),
+        "obligations": rows,
+    }
+
+
+@app.get("/audit/{obligation_id}")
+def audit_chain(obligation_id: str) -> dict:
+    """Everything that happened to one obligation and why, as one document."""
+    chain = audit.audit_chain(obligation_id)
+    if chain is None:
+        raise HTTPException(status_code=404, detail="obligation not found")
+    return chain
+
+
+@app.get("/trust")
+def trust() -> dict:
+    """The configuration actually in force, for the trust panel.
+
+    Every hash here is read from the same loader the enforcing code uses, so
+    what the panel shows is what decided, not a second reading of the files.
+    """
+    settings = get_settings()
+    return {
+        "policy": {
+            "hash": policy.policy_hash(),
+            "version": policy.policy_version(),
+        },
+        "evidence": {
+            "hash": evidence_gate.config_hash(),
+            "gate_enabled": settings.evidence_gate_enabled,
+        },
+        "escalation": {
+            "hash": escalation.config_hash(),
+            "max_notifications_per_recipient_per_24h": escalation.limit_per_recipient(),
+        },
+        "model": {
+            "name": settings.gemini_model,
+            "location": settings.gemini_location,
+            "role": "proposes only, never commits",
+        },
+        "git_sha": settings.git_sha,
+    }
