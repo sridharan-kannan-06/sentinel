@@ -5,4 +5,13 @@ google-cloud-firestore==2.28.1
 google-cloud-tasks==2.24.0
 google-cloud-secret-manager==2.30.0
 google-adk==2.7.1
-google-api-python-client==2.187.0
+google-api-python-client==2.199.0
+
+# Pinned deliberately. Adding the Google API client pulled a google-api-core that
+# percent-encodes the Firestore database id, so every transaction failed with
+# "400 Invalid database id %28default%29" while the same code worked locally.
+# The rollback path then masked it with a second error about a missing
+# transaction id. These are the versions verified end to end.
+google-api-core==2.34.0
+google-auth==2.56.3
+googleapis-common-protos==1.75.1
