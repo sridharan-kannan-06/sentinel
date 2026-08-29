@@ -132,3 +132,47 @@ note that the letter was genuinely asking for. It kept chasing the real document
 That is structural rather than lucky. The interpreter holds no tools, closure is
 not in its vocabulary, no agent can request closure as an action, and `CLOSED`
 has exactly one legal predecessor in the state machine.
+
+---
+
+## 4. In-boundary Gemma triage
+
+Reproduce with `python eval/triage_eval.py`. Sixteen labelled events: the twelve
+fixtures in de-identified form plus four ops-channel messages that must not create
+work.
+
+| | `gemma3:1b` | `gemma3:4b` |
+|---|---|---|
+| Accuracy | 50% | **75%** (12 of 16) |
+| Real work labelled "none" | 0 | **0** |
+| Noise labelled as work | 1 | **0** |
+| Latency, Cloud Run CPU | within 25 s | **~44 s** |
+
+The accuracy figure is not the interesting one. **Zero real obligations were
+labelled "none" at either model size.** The dangerous direction of error — a
+classifier deciding nothing needs doing — did not occur, and the fallback is
+biased towards creating work rather than suppressing it on purpose.
+
+The latency is what decided the design. Forty-four seconds per event is not
+something a trust boundary can block for, so the code path ships switched off.
+`TRIAGE_URL` unset means ingest skips it; set, the boundary calls Gemma, records
+the label, and publishes it alongside the de-identified text with nothing reading
+it to decide anything. Verified working end to end before being switched off:
+
+```
+raw    Ramesh Pillai, MRN 4471952, listed for total knee replacement by Dr. Vikram Shah
+tokens PT-339a, MRN-6395, DR-0586
+triage {"domain": "revenue", "creates_obligation": true, "model": "gemma3:4b", "degraded": false}
+```
+
+### A measurement error worth recording
+
+The first `gemma3:4b` run reported **100%**, and it was wrong. Four of the sixteen
+calls had timed out and silently taken the fallback label, which happened to be
+correct for those four. The classifier was being credited for answers it never
+gave.
+
+A fallback now sets `degraded`, and the harness refuses to count a degraded result
+as correct. The true figure is 75%. It is a small bug of exactly the kind that
+turns an evaluation into a press release, and it was only visible because the raw
+model output was printed alongside the verdict.

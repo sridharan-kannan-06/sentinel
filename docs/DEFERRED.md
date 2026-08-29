@@ -125,16 +125,56 @@ layer sitting under the part of the system that decides who may do what.
 
 ---
 
-## Gemma in-boundary triage — attempted last, cut if it does not work
+## Gemma in-boundary triage — built, measured, and taken off the critical path
 
-The plan was a small open model on Cloud Run CPU inside the trust boundary,
-doing first-pass event classification so that only structured, de-identified
-output reaches Gemini. It is architecturally justified and it is a genuine second
-Google model rather than a decorative one.
+The plan was a small open model on Cloud Run CPU inside the trust boundary, doing
+first-pass classification so that the cheapest, highest-volume pass over hospital
+text never leaves the building.
 
-It is scheduled last precisely because it is the kind of thing that quietly eats
-an afternoon. If it is not working as a real code path in the running system, it
-will be cut rather than shipped as a decoration, and this section will say so.
+It was built. `services/triage` runs Gemma under Ollama with the model baked into
+the image, listening only on localhost. It is deployed, it works, and
+`eval/triage_eval.py` measures it against sixteen labelled events.
+
+Then it was measured, and the measurement is why it is not on the critical path.
+
+| | `gemma3:270m` | `gemma3:1b` | `gemma3:4b` |
+|---|---|---|---|
+| Accuracy, 16 labelled events | 1 of 4 sampled | 50% | **75%** |
+| Real work labelled "none" | — | 0 | **0** |
+| Latency, Cloud Run CPU | fast | fits 25s | **~44 s** |
+
+**Forty-four seconds per event is not something a trust boundary can wait for.**
+Ingest would block for three quarters of a minute per event to obtain a label
+that nothing is allowed to act on. The smaller models are fast enough and are not
+accurate enough to be worth the call: at 50%, a routing hint is barely better than
+guessing between four labels.
+
+So the code path exists and is off. `TRIAGE_URL` unset means ingest skips it
+entirely, which is the deployed configuration. Set it and the boundary calls
+Gemma, records the label on the event, and publishes it alongside the
+de-identified text. Nothing reads that label to decide anything, and the timeout
+is eight seconds with the event proceeding unlabelled if it expires.
+
+Two things are worth keeping from this even though the feature is off.
+
+The accuracy number that matters is not 75%. It is that **zero real obligations
+were labelled "none"** at either model size. The dangerous direction of error —
+the classifier deciding nothing needs doing — did not occur. The errors were all
+in the harmless direction, which is what the fallback in `normalise()` is biased
+towards on purpose.
+
+And the first measurement of `gemma3:4b` said 100%, which was wrong. Four of the
+sixteen calls had timed out and silently taken the fallback label, which happened
+to be the correct one for those four. The classifier was being credited for
+answers it never gave. That is now impossible: a fallback sets `degraded` and the
+harness refuses to count a degraded result as correct. It is a small bug and it is
+the kind that turns an evaluation into a press release.
+
+**On claiming this as a bonus integration:** it is deployed, it is a real code
+path, and it is switched off because measuring it showed it should be. Describing
+it as "a second Google model integrated into the running system" would be
+stretching further than the facts support, and the facts are more interesting
+anyway.
 
 ---
 

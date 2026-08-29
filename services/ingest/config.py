@@ -19,6 +19,8 @@ class Settings:
     kms_key: str
     wrapped_key_secret: str
     git_sha: str
+    triage_url: str
+    triage_timeout: float
 
 
 @lru_cache(maxsize=1)
@@ -31,4 +33,9 @@ def get_settings() -> Settings:
         kms_key=os.environ.get("KMS_KEY", ""),
         wrapped_key_secret=os.environ.get("WRAPPED_KEY_SECRET", "phi-wrapped-key"),
         git_sha=os.environ.get("GIT_SHA", "unknown"),
+        # In-boundary Gemma triage. Empty means skip it entirely, which is
+        # the deployed default: see docs/DEFERRED.md for the measurement
+        # that led there.
+        triage_url=os.environ.get("TRIAGE_URL", "").rstrip("/"),
+        triage_timeout=float(os.environ.get("TRIAGE_TIMEOUT", "8")),
     )

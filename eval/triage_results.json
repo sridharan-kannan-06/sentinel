@@ -1,0 +1,107 @@
+{
+  "model": "gemma3:4b",
+  "samples": 16,
+  "correct": 12,
+  "accuracy": 0.75,
+  "degraded": 4,
+  "missed_work": 0,
+  "invented_work": 0,
+  "rows": [
+    {
+      "expected": "clinical",
+      "got": "clinical",
+      "raw": "",
+      "degraded": true
+    },
+    {
+      "expected": "clinical",
+      "got": "clinical",
+      "raw": "",
+      "degraded": true
+    },
+    {
+      "expected": "clinical",
+      "got": "clinical",
+      "raw": "",
+      "degraded": true
+    },
+    {
+      "expected": "clinical",
+      "got": "clinical",
+      "raw": "",
+      "degraded": true
+    },
+    {
+      "expected": "revenue",
+      "got": "revenue",
+      "raw": "revenue",
+      "degraded": false
+    },
+    {
+      "expected": "revenue",
+      "got": "revenue",
+      "raw": "revenue",
+      "degraded": false
+    },
+    {
+      "expected": "revenue",
+      "got": "revenue",
+      "raw": "revenue",
+      "degraded": false
+    },
+    {
+      "expected": "revenue",
+      "got": "revenue",
+      "raw": "revenue",
+      "degraded": false
+    },
+    {
+      "expected": "revenue",
+      "got": "revenue",
+      "raw": "revenue",
+      "degraded": false
+    },
+    {
+      "expected": "pathway",
+      "got": "pathway",
+      "raw": "pathway",
+      "degraded": false
+    },
+    {
+      "expected": "pathway",
+      "got": "pathway",
+      "raw": "pathway",
+      "degraded": false
+    },
+    {
+      "expected": "pathway",
+      "got": "pathway",
+      "raw": "pathway",
+      "degraded": false
+    },
+    {
+      "expected": "none",
+      "got": "none",
+      "raw": "none",
+      "degraded": false
+    },
+    {
+      "expected": "none",
+      "got": "none",
+      "raw": "none",
+      "degraded": false
+    },
+    {
+      "expected": "none",
+      "got": "none",
+      "raw": "none",
+      "degraded": false
+    },
+    {
+      "expected": "none",
+      "got": "none",
+      "raw": "none",
+      "degraded": false
+    }
+  ]
+}

@@ -30,6 +30,7 @@ from pydantic import BaseModel, Field
 
 import boundary
 import logs
+import triage
 from config import get_settings
 
 EVENTS = "events"
@@ -218,6 +219,12 @@ def ingest_event(event: RawEvent, request: Request) -> dict:
     _record_aliases(deidentified.aliases, key)
 
     settings = get_settings()
+
+    # First pass on Gemma, inside the boundary, on the de-identified text. The
+    # label is recorded and never obeyed: an obligation is created by the
+    # interpreter and admitted by the ledger regardless of what this says.
+    label = triage.classify(deidentified.text, event.event_type, trace_id=trace_id)
+
     payload = {
         "idempotency_key": key,
         "source": event.source,
@@ -226,6 +233,7 @@ def ingest_event(event: RawEvent, request: Request) -> dict:
         "tokens": deidentified.tokens,
         "occurred_at": (event.occurred_at or utcnow()).isoformat(),
         "metadata": event.metadata,
+        "triage": label,
     }
 
     topic = publisher().topic_path(settings.project_id, settings.pubsub_topic)
@@ -249,6 +257,7 @@ def ingest_event(event: RawEvent, request: Request) -> dict:
             "published": True,
             "message_id": message_id,
             "screened_at": utcnow(),
+            "triage": label,
         }
     )
 

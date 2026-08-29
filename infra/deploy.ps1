@@ -4,6 +4,7 @@
 #   infra/deploy.ps1 -Service ingest
 #   infra/deploy.ps1 -Service reid       re-identification, closed to the internet
 #   infra/deploy.ps1 -Service web        the Continuity Board
+#   infra/deploy.ps1 -Service triage     Gemma, in the boundary, on CPU
 #   infra/deploy.ps1 -Service clin     ClinicalFollowUpAgent
 #   infra/deploy.ps1 -Service rev      RevenueCycleAgent
 #   infra/deploy.ps1 -Service path     CarePathwayAgent
@@ -19,7 +20,7 @@
 
 param(
   [Parameter(Mandatory = $true)]
-  [ValidateSet("engine", "ingest", "reid", "web", "clin", "rev", "path")]
+  [ValidateSet("engine", "ingest", "reid", "web", "triage", "clin", "rev", "path")]
   [string]$Service
 )
 
@@ -36,6 +37,7 @@ $AGENT_ROLES = @{
 }
 $IsAgent   = $AGENT_ROLES.ContainsKey($Service)
 $IsWeb     = $Service -eq "web"
+$IsTriage  = $Service -eq "triage"
 $SourceDir = if ($IsAgent) { "agents" } else { $Service }
 $NAME      = "sentinel-$Service"
 $SA        = "sentinel-$Service@$PROJECT_ID.iam.gserviceaccount.com"
@@ -124,6 +126,12 @@ if ($Service -eq "engine") {
     "REID_BASE_URL=$($cfg['REID_BASE_URL'])"
   )
   $memory = "1Gi"
+} elseif ($IsTriage) {
+  # This service holds no credentials and reaches no Google Cloud API. It runs a
+  # model on CPU and answers on localhost. Its identity can write logs and
+  # nothing else.
+  $pairs = $common
+  $memory = "8Gi"
 } elseif ($Service -eq "reid") {
   $pairs = $common + @(
     "KMS_KEY=$($cfg['KMS_KEY'])",
@@ -140,6 +148,7 @@ if ($Service -eq "engine") {
   $memory = "512Mi"
 }
 $envArg = $pairs -join ","
+$cpu = if ($IsTriage) { "4" } else { "1" }
 
 # Every service except reid is public and holds nothing worth reading. reid
 # holds the only path from a token back to a name, so it is reachable only by
@@ -157,7 +166,7 @@ gcloud run deploy $NAME `
   --min-instances=0 `
   --max-instances=2 `
   --memory=$memory `
-  --cpu=1 `
+  --cpu=$cpu `
   --timeout=300 `
   $authFlag `
   --set-env-vars=$envArg `
@@ -194,6 +203,7 @@ switch ($Service) {
   }
   "ingest" { SetEnvValue "INGEST_BASE_URL" $url }
   "reid"   { SetEnvValue "REID_BASE_URL" $url }
+  "triage" { SetEnvValue "TRIAGE_BASE_URL" $url }
   "web"    { SetEnvValue "WEB_BASE_URL" $url }
   "clin"   { SetEnvValue "AGENT_CLIN_URL" $url }
   "rev"    { SetEnvValue "AGENT_REV_URL" $url }
