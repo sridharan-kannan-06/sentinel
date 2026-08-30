@@ -1,14 +1,15 @@
 # Sentinel
 
-**Every agent in this hackathon reacts to events. Sentinel reacts to the absence
-of events.**
+**Most agents react to events. Sentinel reacts to the absence of events.**
 
 An autonomous continuity layer for hospital operations. It watches for the work
 that *didn't* happen, works out who owes it, chases it across days, and refuses
 to close anything without proof.
 
-Built solo for the All Things Agentic Hackathon, Fortified Enterprise Fleet
-track, between 24 and 31 August 2026.
+Built solo in eight days on Gemini 3.5 Flash, Google ADK and Google Cloud.
+
+**[Four-minute demo](docs/demo.mp4)** · **[Architecture](docs/architecture.md)** ·
+**[Measured results](eval/RESULTS.md)**
 
 ---
 
@@ -167,12 +168,13 @@ appears three times in this system: the model proposes an SLA and code computes
 the dates, the model proposes a route and code decides whether it is permitted,
 the model proposes closure and code decides whether it happened.
 
-**What is missing from this list is the hospital.** The plan called for six
-questions to a working hospital about what actually gets forgotten. That
-conversation did not happen inside the build window, so the workflows here are
+**What is missing from this list is the hospital.** The intent was to ground the
+three workflows in six questions to working clinical staff about what actually
+gets forgotten. That did not happen inside the build window, so the workflows are
 modelled on documented failure modes rather than on anything a member of staff
-said. It is the weakest part of the submission and it is better to say so than to
-present three plausible workflows as though they were validated.
+said. That limit is stated here rather than left for a reader to discover:
+presenting three plausible workflows as validated would be the one dishonest
+claim in the project.
 
 ---
 
@@ -357,16 +359,82 @@ The short version:
 
 ---
 
-## What was not built
+## What was not built, and why
 
-[docs/DEFERRED.md](docs/DEFERRED.md) covers each decision, including why Agent
-Gateway was deliberately not used and what the hand-written policy enforcement
-point does instead.
+### Agent Gateway — deliberately not used
 
----
+Agent Gateway is the obvious component to reach for on this problem. It is in
+private preview and access was not available within the build window, and
+designing around a component that could not be exercised would have produced a
+diagram that was true and a system that was not.
 
-## A note on how this was built
+What was built instead is a policy enforcement point in
+`services/engine/policy.py`, governed by `policy/policy.yaml`. Writing it rather
+than adopting it forced three decisions a managed gateway would have made
+invisibly, and each of them mattered:
 
-Developed with AI assistance (Claude). Every architectural decision, every
-measured number, and every finding above was verified against the running system
-rather than asserted.
+**Deny by default in three separate layers.** An undeclared agent has no
+permissions, an undeclared action is refused, and a declared action outside that
+agent's allow list is refused. A gateway configured by exception tends to allow
+by default with a deny list bolted on, and the difference only surfaces the day
+somebody adds a tool and forgets the rule.
+
+**T3 is evaluated before the allow list.** Every agent is refused a clinical
+write for the same reason, and that reason — this system has no clinical
+authority at all — is more useful than the "wrong department" answer the allow
+list would have produced.
+
+**The decision is an artefact, not an outcome.** Every call returns a decision
+id, the policy version, and the hash of the exact bytes that decided. Those land
+in the ledger, so a refusal recorded three days ago ties to the configuration in
+force at the time rather than to whatever the file says today.
+
+The enforcement point is also duplicated on purpose: each agent re-checks its own
+allow list even though the coordinator already checked. A single gateway is a
+single place to be wrong.
+
+### Memory Bank — cut, and the rule it would have needed already holds
+
+Advisory memory scoped to a role would be useful and is not load-bearing. The
+rule it would have had to obey is worth stating because the architecture already
+enforces it: *memory may change how the agent acts; it may never change whether
+an obligation closes.* A poisoned memory could at most cause a badly chosen
+notification channel. There is no code path from a remembered preference to a
+status change.
+
+### Google Chat, Calendar and Sheets — blocked by account type
+
+Chat incoming webhooks require a Google Workspace account and this project runs
+on a consumer account. `services/engine/notify.py` ships three implementations
+behind one interface — `gmail`, `sheets`, `log` — so the channel is
+configuration. Gmail is what runs.
+
+### Gemma triage — built, measured, switched off
+
+`services/triage` runs Gemma under Ollama with the model baked into the image,
+listening only on localhost so the classification never leaves the boundary. It
+works, and `eval/triage_eval.py` measures it: 75% accurate at `gemma3:4b`, and
+about 44 seconds per classification on Cloud Run CPU.
+
+Forty-four seconds is not something a trust boundary can block for, so the code
+path ships disabled. `TRIAGE_URL` unset means ingest skips it. The accuracy
+figure that matters is not 75%: **zero real obligations were labelled "none"** at
+either model size, so the dangerous direction of error did not occur.
+
+### Everything except re-identification is publicly reachable
+
+A deliberate trade. The public services hold no PHI — every identifier they
+handle is already a token — and the one service that can reverse a token is
+closed and reachable only by the board's identity. The Pub/Sub subscription and
+the Cloud Scheduler job already authenticate with OIDC, so closing the rest is a
+one-flag change rather than a rewrite.
+
+### Explicitly out of scope
+
+Multi-tenancy, authentication beyond two roles, a mobile app, voice, a chat
+interface, a graph visualisation library, an HL7 or FHIR parser beyond a single
+fixture, Kubernetes.
+
+The fixture set is twelve subjects rather than a hundred. A board showing a
+hundred fabricated workflows is the fastest way to lose a technical reader: the
+first hollow row anybody opens discredits every row above it.

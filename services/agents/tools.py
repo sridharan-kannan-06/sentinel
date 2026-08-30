@@ -147,8 +147,8 @@ def request_internal_document(obligation: dict, payload: dict) -> ToolResult:
 @tool("read_lab_status")
 def read_lab_status(obligation: dict, payload: dict) -> ToolResult:
     # Reads the obligation's own view of clinical progress. There is no
-    # laboratory system behind this in the hackathon build, and pretending
-    # otherwise would be fabricating a data source.
+    # laboratory system integrated behind this yet, and inventing a response
+    # would be fabricating a data source.
     return ToolResult(
         ok=True,
         summary=f"Lab obligation {obligation.get('id')} is {obligation.get('status')}",

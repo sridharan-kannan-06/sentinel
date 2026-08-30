@@ -2,6 +2,7 @@
 # treats an unmarked .pdf as text and corrupts it on checkout, which breaks the
 # injection fixture for anyone cloning on Windows.
 *.pdf binary
+*.mp4 binary
 *.png binary
 *.jpg binary
 *.ico binary

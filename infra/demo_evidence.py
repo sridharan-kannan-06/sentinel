@@ -1,12 +1,12 @@
-"""The Evidence Gate, on camera, in one command.
+"""Demonstrate the Evidence Gate against the deployed system.
 
     .venv\\Scripts\\python.exe infra\\demo_evidence.py
 
 Creates one obligation, tries to close it the way an over-confident agent would,
 watches it refused, then closes it with a real record from a real system.
 
-Output is spaced and slowed deliberately so it is readable when screen-recorded.
-Everything here hits the deployed system; nothing is faked or replayed.
+Output is paced so each verdict can be read as it appears. Everything here runs
+against the deployed system; nothing is faked or replayed.
 """
 
 from __future__ import annotations

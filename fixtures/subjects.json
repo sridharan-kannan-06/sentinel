@@ -2,8 +2,8 @@
   "note": [
     "Twelve subjects, not a hundred. Every one is invented and every one is",
     "traceable through the system end to end. A dashboard showing a hundred",
-    "fabricated workflows is worse than one showing twelve real ones, because a",
-    "judge who clicks a hollow row stops believing the rest of the screen.",
+    "fabricated workflows is worse than one showing twelve real ones: the first",
+    "hollow row anybody opens discredits every row above it.",
     "",
     "These names exist only in this file. They are the input to the trust",
     "boundary, which replaces them with tokens before anything reaches a model.",

@@ -135,7 +135,7 @@ def test_no_agent_is_allowed_an_undeclared_action(agent: str) -> None:
 
 
 def test_the_t3_denial_explains_itself_as_absolute() -> None:
-    """The denial a judge reads on screen should say why, not just no."""
+    """A denial that says only "no" is a denial nobody can act on."""
     decision = decide(REVENUE, "write_clinical_record")
     assert "every agent without exception" in decision.reason
     assert "no approval path" in decision.reason

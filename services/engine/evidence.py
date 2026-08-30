@@ -1,6 +1,6 @@
 """The Evidence Gate.
 
-The second invariant in CLAUDE.md says the model may propose closure but only an
+The second invariant of this system is that the model may propose closure but only an
 authoritative external fact may close. This module is that fact-checker, and it
 contains no model call. An agent can be as confident as it likes; if the five
 checks below do not all pass, the obligation moves to PENDING_EVIDENCE and the

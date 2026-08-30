@@ -1,4 +1,4 @@
-"""Close the long-running obligation, on camera, in one command.
+"""Close the long-running obligation, refusal first.
 
     .venv\\Scripts\\python.exe infra\\demo_close_canary.py              dry run
     .venv\\Scripts\\python.exe infra\\demo_close_canary.py --live       refusal only
@@ -9,11 +9,10 @@ insurer reference and watches it close. Doing this against the obligation that
 has actually been chasing itself for six days is worth more than doing it against
 one created thirty seconds earlier.
 
-Nothing is written without --live, so the script is safe to run while rehearsing.
-That matters more than usual here: submitting any evidence at all moves the
-obligation out of BREACHED and into PENDING_EVIDENCE, and BREACHED after six days
-is the thing worth filming. --close is separate again, because CLOSED is terminal
-and there is no second take.
+Nothing is written without --live, and --close is separate again. Submitting any
+evidence moves the obligation out of BREACHED and into PENDING_EVIDENCE, and
+CLOSED is terminal with no way back. Both steps are guarded because both are
+one-way.
 """
 
 from __future__ import annotations
@@ -39,7 +38,8 @@ ENGINE = (
     os.environ.get("ENGINE_LOCAL_URL") or os.environ.get("ENGINE_BASE_URL", "")
 ).rstrip("/")
 
-CANARY = "OBL-a2ec59ecaf"
+# The obligation opened on 24 August and left running.
+LONG_RUNNING = "OBL-a2ec59ecaf"
 PAUSE = float(os.environ.get("DEMO_PAUSE", "3"))
 WIDTH = 78
 
@@ -119,7 +119,7 @@ def main() -> int:
     parser = argparse.ArgumentParser()
     parser.add_argument("--live", action="store_true", help="actually submit evidence")
     parser.add_argument("--close", action="store_true", help="also submit the qualifying evidence")
-    parser.add_argument("--obligation", default=CANARY, help="target, for rehearsing on a throwaway")
+    parser.add_argument("--obligation", default=LONG_RUNNING, help="target a different obligation")
     args = parser.parse_args()
 
     if not ENGINE:
@@ -153,7 +153,7 @@ def main() -> int:
         print("   Add --live to submit the first. Add --close for both.")
         print()
         print("   Note: submitting anything moves this out of BREACHED and into")
-        print("   PENDING_EVIDENCE, and CLOSED is terminal. There is no second take.")
+        print("   PENDING_EVIDENCE, and CLOSED is terminal. Both steps are one-way.")
         print()
         return 0
 

@@ -1,6 +1,6 @@
 """Tests that the trust boundary cannot be traversed in the wrong order.
 
-CLAUDE.md's third invariant is that the model never sees a patient. That holds
+The third invariant of this system is that the model never sees a patient. That holds
 only if screening always precedes de-identification and blocked content never
 produces a forwardable payload. Both are asserted here against the real
 `process` function with the two network calls stubbed, so the test is fast and

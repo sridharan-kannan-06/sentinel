@@ -1,7 +1,7 @@
 """Obligation domain model and the legal state machine.
 
 The transition table is the enforcement point for the second invariant in
-CLAUDE.md: the model may propose closure, but only an authoritative external
+this system: the model may propose closure, but only an authoritative external
 fact may close. CLOSED has exactly one legal predecessor, PENDING_EVIDENCE, so
 no code path can move an obligation from OPEN straight to CLOSED however
 confident a model is. `assert_closed_is_gated` proves that property from the

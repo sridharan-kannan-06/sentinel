@@ -1,4 +1,4 @@
-"""The prompt injection, on camera, in one command.
+"""Demonstrate prompt injection handling against the deployed system.
 
     .venv\\Scripts\\python.exe infra\\demo_injection.py
 

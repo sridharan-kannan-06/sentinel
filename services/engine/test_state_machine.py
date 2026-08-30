@@ -1,7 +1,7 @@
 """Tests for the obligation state machine.
 
 The first test is the important one. It is the executable form of the second
-invariant in CLAUDE.md, and it fails if anyone ever adds an edge that lets an
+invariant of this system, and it fails if anyone ever adds an edge that lets an
 obligation reach CLOSED without passing through the Evidence Gate.
 """
 
