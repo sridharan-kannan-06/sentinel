@@ -1,5 +1,5 @@
 @use "@carbon/react/scss/themes" as themes;
-@use "@carbon/react/scss/theme" with ($theme: themes.$g100);
+@use "@carbon/react/scss/theme" as theme with ($theme: themes.$g100);
 @use "@carbon/react";
 @use "@carbon/react/scss/spacing" as *;
 @use "@carbon/react/scss/type" as *;
@@ -7,8 +7,16 @@
 // Gray 100. This is an operations console, not a product page: dense, calm, and
 // legible at video resolution. No gradients, no rounded pills, no accent colour
 // that is not carrying information.
+//
+// Carbon emits its tokens under class selectors only: .cds--white, .cds--g10,
+// .cds--g90, .cds--g100. It never writes them to :root. Configuring the theme
+// with `@use ... with ($theme: ...)` sets which values those classes get; it
+// does not put them anywhere a bare page can see. Without this block every
+// var(--cds-*) resolves to nothing and the page renders black text on a black
+// background, which is exactly what it did.
 :root {
   color-scheme: dark;
+  @include theme.theme();
 }
 
 html,
@@ -17,6 +25,13 @@ body {
   color: var(--cds-text-primary);
   margin: 0;
   padding: 0;
+}
+
+// Carbon's header is fixed at the top and is 3rem tall, so page content starts
+// underneath it and the first heading is clipped. Nothing in Carbon reserves
+// that space for you.
+main {
+  padding-top: 3rem;
 }
 
 // Every number on this screen is compared against another number, so they are
@@ -33,10 +48,44 @@ body {
   letter-spacing: 0.02em;
 }
 
+// Carbon hides the header navigation below its large breakpoint because it
+// expects a side nav to take over on small screens. There is no side nav here
+// and there are two links, so hiding them just loses the navigation. Keep them
+// visible at every width and let the header shrink around them.
+.cds--header__nav {
+  display: block;
+}
+
+.cds--header__menu-bar {
+  display: flex;
+}
+
+@media (max-width: 42rem) {
+  // Drop the suffix rather than truncate it. "Sentinel Continuity Boar" reads
+  // as a rendering bug; "Sentinel" reads as a decision.
+  .header-suffix {
+    display: none;
+  }
+
+  .cds--header__name {
+    padding-right: $spacing-04;
+  }
+
+  .cds--header__menu-item {
+    padding: 0 $spacing-04;
+  }
+}
+
 .page {
   padding: $spacing-07 $spacing-07 $spacing-09;
   max-width: 1600px;
   margin: 0 auto;
+}
+
+@media (max-width: 42rem) {
+  .page {
+    padding: $spacing-05 $spacing-05 $spacing-07;
+  }
 }
 
 .page-header {
