@@ -279,27 +279,37 @@ time is real elapsed time.
 
 ### Running locally
 
-The engine and the boundary talk to real Google Cloud services, so a local run
-still needs a provisioned project and application default credentials. There is
-no emulator path.
+There is no emulator path. The engine talks to Firestore, Cloud Tasks and Vertex
+AI, and the boundary talks to Sensitive Data Protection and Model Armor, so a
+local run still needs a provisioned project and application default credentials.
+What runs locally is the code, not the infrastructure.
+
+One-time setup:
 
 ```bash
 python -m venv .venv
-.venv/Scripts/python.exe -m pip install -r services/engine/requirements.txt
-cd services/engine
-../../.venv/Scripts/python.exe -m uvicorn main:app --reload --port 8080
+.venv/Scripts/python.exe -m pip install -r requirements-dev.txt
 ```
 
-The board:
+Then one service at a time:
 
 ```bash
-cd web
-npm install
-npm run dev
+powershell -ExecutionPolicy Bypass -File infra/run-local.ps1 -Service web
+powershell -ExecutionPolicy Bypass -File infra/run-local.ps1 -Service engine
 ```
 
-Set `ENGINE_BASE_URL` in the environment first. The board fetches everything
-server side, so the engine URL never reaches the browser.
+The board comes up on `http://localhost:3000` and the engine on `:8080`.
+
+Use the script rather than starting uvicorn by hand. The services read their
+configuration from the environment and uvicorn does not read `.env`, so a service
+started without it answers `/health` perfectly well and fails every Firestore
+call with `RESOURCE_PROJECT_INVALID`. The script loads `.env`, checks for
+credentials, and substitutes the hostname this machine can actually resolve for
+any deployed service the local one needs to reach.
+
+Running the board locally against the deployed engine is the useful combination:
+you get hot reload on the UI and the real ledger behind it. The board fetches
+everything server side, so the engine URL never reaches the browser.
 
 ### Tests
 
