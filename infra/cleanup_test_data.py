@@ -1,17 +1,17 @@
 """Remove test obligations, their history, their timers, and test events.
 
-The canary is protected. It has been open since 24 August and cannot be
-recreated, so it is excluded by id and the script refuses to run if it cannot
-work out which obligation that is.
+A long-running obligation cannot be recreated: its value is the elapsed time
+recorded against it. Pass its id to --keep and it is excluded, along with any
+event whose key begins with demo-.
 
-    python infra/cleanup_test_data.py            list what would be removed
-    python infra/cleanup_test_data.py --apply    remove it
+    python infra/cleanup_test_data.py --keep OBL-abc123           list
+    python infra/cleanup_test_data.py --keep OBL-abc123 --apply   remove
 """
 
 from __future__ import annotations
 
+import argparse
 import os
-import re
 import sys
 from pathlib import Path
 
@@ -31,30 +31,21 @@ REGION = os.environ["GOOGLE_CLOUD_REGION"]
 QUEUE = os.environ["TASKS_QUEUE"]
 
 
-def canary_id() -> str:
-    """Read the canary's id from the record written when it was opened."""
-    doc = REPO_ROOT / "docs" / "CANARY.md"
-    if not doc.exists():
-        raise SystemExit(
-            "docs/CANARY.md is missing, so the canary cannot be identified. "
-            "Refusing to delete anything."
-        )
-    match = re.search(r"Obligation id: `(OBL-[a-z0-9]+)`", doc.read_text(encoding="utf-8"))
-    if not match:
-        raise SystemExit("No obligation id in docs/CANARY.md. Refusing to delete anything.")
-    return match.group(1)
-
-
 def main() -> int:
-    apply = "--apply" in sys.argv
-    keep = canary_id()
+    parser = argparse.ArgumentParser()
+    parser.add_argument("--keep", default="", help="obligation id to preserve")
+    parser.add_argument("--apply", action="store_true", help="actually delete")
+    args = parser.parse_args()
+
+    apply = args.apply
+    keep = args.keep
     db = firestore.Client(project=PROJECT)
 
     doomed: list[str] = []
     for snapshot in db.collection("obligations").stream():
         record = snapshot.to_dict() or {}
         if snapshot.id == keep:
-            print(f"KEEP    {snapshot.id}  {record.get('status')}  canary")
+            print(f"KEEP    {snapshot.id}  {record.get('status')}  preserved by --keep")
             continue
         doomed.append(snapshot.id)
         print(f"DELETE  {snapshot.id}  {record.get('status')}  {record.get('type')}")
@@ -117,8 +108,8 @@ def main() -> int:
 
     print(
         f"\nRemoved {len(doomed)} obligations, {len(events)} events, "
-        f"{len(approvals)} approvals, {len(doomed_tasks)} timers. "
-        f"Canary {keep} untouched."
+        f"{len(approvals)} approvals, {len(doomed_tasks)} timers."
+        + (f" {keep} untouched." if keep else "")
     )
     return 0
 

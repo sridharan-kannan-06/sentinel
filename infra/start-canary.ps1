@@ -30,8 +30,9 @@ $escalate = [datetime]::new(2026, 8, 30, 5, 30, 0, [System.DateTimeKind]::Utc)
 
 function IsoUtc($dt) { return $dt.ToString("yyyy-MM-ddTHH:mm:ssZ") }
 
-# The subject token is hardcoded for this phase. From Phase 1 onward tokens come
-# out of Sensitive Data Protection at the trust boundary and no caller chooses one.
+# The subject token is given directly here because this script opens an
+# obligation without an inbound event. Tokens normally come out of Sensitive Data
+# Protection at the trust boundary, where no caller chooses one.
 $payload = @{
   type               = "insurance_preauthorisation"
   subject_token      = "PT-a94f"
@@ -72,27 +73,10 @@ Write-Host "Deadline:             $($created.obligation.deadline)"
 Write-Host "Timers enqueued:      $($created.tasks.Count)"
 foreach ($t in $created.tasks) { Write-Host "  $t" }
 
-# Record the id so the demo and the Continuity Board can point at it later
-# without anyone having to remember it.
-$canaryFile = Join-Path $RepoRoot "docs\CANARY.md"
-$started = (Get-Date).ToUniversalTime().ToString("yyyy-MM-ddTHH:mm:ssZ")
-$lines = @(
-  "# Canary",
-  "",
-  "One real obligation, opened once and left running until submission. Nothing",
-  "about its timing is simulated.",
-  "",
-  "- Obligation id: ``$id``",
-  "- Opened at: $started UTC",
-  "- Checkpoints: $(IsoUtc $nudge), $(IsoUtc $breach), $(IsoUtc $escalate)",
-  "- Service: $base",
-  "",
-  "Inspect it with:",
-  "",
-  '```powershell',
-  "curl.exe -s $base/obligations/$id",
-  '```'
-)
-[System.IO.File]::WriteAllLines($canaryFile, $lines)
 Write-Host ""
-Write-Host "Recorded in docs/CANARY.md"
+Write-Host "Keep this id. The value of a long-running obligation is the elapsed time"
+Write-Host "recorded against it, and it cannot be recreated once deleted."
+Write-Host ""
+Write-Host "  Inspect it:  curl.exe -s $base/obligations/$id"
+Write-Host "  Protect it:  python infra/cleanup_test_data.py --keep $id --apply"
+Write-Host ""

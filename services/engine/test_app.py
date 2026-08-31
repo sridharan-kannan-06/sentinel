@@ -15,10 +15,11 @@ import main
 HERE = Path(__file__).resolve().parent
 
 
-def test_policy_hash_reports_absent_when_no_policy_exists() -> None:
-    # The policy engine lands in Phase 2. Until then the hash must be the literal
-    # string absent rather than a hash of an empty or missing file.
-    assert main.policy_config_hash() in {"absent"} or len(main.policy_config_hash()) == 16
+def test_policy_hash_is_a_hash_or_an_honest_absence() -> None:
+    # A missing policy file reports the literal string absent rather than a hash
+    # of nothing, so the trust panel can never show a hash that corresponds to no
+    # policy at all.
+    assert main.policy_config_hash() == "absent" or len(main.policy_config_hash()) == 16
 
 
 def test_health_reports_the_global_gemini_location() -> None:

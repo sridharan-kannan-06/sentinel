@@ -231,5 +231,5 @@ def run(action: str, obligation: dict, payload: dict) -> ToolResult:
     if fn is None:
         # Reachable only for an action the policy permits but no tool implements,
         # such as the tier two actions that wait on the approval queue.
-        return ToolResult(ok=False, summary=f"No tool implements {action!r} in this build")
+        return ToolResult(ok=False, summary=f"No tool implements {action!r}")
     return fn(obligation, payload)

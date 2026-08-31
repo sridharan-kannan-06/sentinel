@@ -34,7 +34,7 @@ def get_settings() -> Settings:
         wrapped_key_secret=os.environ.get("WRAPPED_KEY_SECRET", "phi-wrapped-key"),
         git_sha=os.environ.get("GIT_SHA", "unknown"),
         # In-boundary Gemma triage. Empty means skip it entirely, which is
-        # the deployed default: see docs/DEFERRED.md for the measurement
+        # the deployed default: see the README for the measurement
         # that led there.
         triage_url=os.environ.get("TRIAGE_URL", "").rstrip("/"),
         triage_timeout=float(os.environ.get("TRIAGE_TIMEOUT", "8")),

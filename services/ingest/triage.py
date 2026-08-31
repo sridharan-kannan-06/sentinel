@@ -3,7 +3,7 @@
 Off unless TRIAGE_URL is set, and off in the deployed configuration. The reason
 is measured rather than assumed: gemma3:4b on Cloud Run CPU takes about 44
 seconds per classification, and the trust boundary cannot block for 44 seconds
-per event. The measurement and the decision are in docs/DEFERRED.md.
+per event. The measurement and the decision are recorded in the README.
 
 The code path is real and works. What it is not is load-bearing, and the shape of
 this module is what makes that true: the label is attached to the event and
