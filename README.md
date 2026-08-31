@@ -8,15 +8,14 @@ to close anything without proof.
 
 Built solo in eight days on Gemini 3.5 Flash, Google ADK and Google Cloud.
 
-**[Four-minute demo](docs/demo.mp4)** · **[Architecture](docs/architecture.md)** ·
-**[Measured results](eval/RESULTS.md)**
+[Four-minute demo](docs/demo.mp4) | [Architecture](docs/architecture.md) | [Measured results](eval/RESULTS.md)
 
 ---
 
 ## The problem
 
-Hospitals don't fail because staff don't know their jobs. They fail at the seams
-— between shifts, between departments, between a result arriving and someone
+Hospitals don't fail because staff don't know their jobs. They fail at the seams:
+between shifts, between departments, between a result arriving and someone
 noticing.
 
 A critical potassium result comes back and nobody owns the next step. An insurer
@@ -48,8 +47,8 @@ re-armed it, and the obligation reached `AT_RISK` anyway.
 ### 2. The model may propose closure. Only an authoritative external fact may close
 
 `CLOSED` has exactly one legal predecessor in the state machine, and the only
-edge into it runs through the Evidence Gate — deterministic code with no model
-call inside it. `assert_closed_is_gated()` derives the predecessor set from the
+edge into it runs through the Evidence Gate, which is deterministic code with no
+model call inside it. `assert_closed_is_gated()` derives the predecessor set from the
 transition table at import and raises if it is ever anything else.
 
 Measured over thirty evidence samples: **0% false closure** for the gate, **16%**
@@ -60,7 +59,7 @@ for the same corpus judged by `gemini-3.5-flash`.
 Identifiers are replaced at the trust boundary before anything reaches Gemini.
 `Meena Raghavan` becomes `PT-8119`, `Dr. Anil Kumar` becomes `DR-0385`.
 Tokenisation is deterministic under a KMS-wrapped key, so the same person maps to
-the same token across weeks — which is what makes correlating a multi-day
+the same token across weeks, which is what makes correlating a multi-day
 obligation possible without holding a name anywhere.
 
 Only the de-identified text is ever persisted. Re-identification happens in one
@@ -71,7 +70,7 @@ authenticated caller, and is logged before it answers.
 
 ## Architecture
 
-![Architecture](docs/architecture.svg)
+![Architecture](docs/architecture.png)
 
 Full detail in **[docs/architecture.md](docs/architecture.md)**, including the
 obligation state machine and the reasoning behind where the model is fenced.
@@ -150,7 +149,7 @@ text, and this was measured rather than assumed.** The injected paragraph in
 byte-identical paragraph inside the full 1318-character insurer letter is not
 blocked. Screening that letter in windows finds it at 300 characters per window
 and misses it at 400 and at 600. The boundary now screens long documents whole
-and again in overlapping windows — but that is a mitigation, not a guarantee,
+and again in overlapping windows. But that is a mitigation, not a guarantee,
 which is why it is not what the system relies on. Fed the injection with
 screening bypassed, the interpreter produced an ordinary obligation for the
 document the letter was genuinely asking for and kept chasing it. The defence
@@ -158,7 +157,7 @@ that held was structural, not filtering.
 
 **Asking a model to tier an action gets you the seriousness of the subject, not
 the authority the action needs.** Asked to assign a risk tier to a critical
-potassium result, `gemini-3.5-flash` returns T3 — the tier reserved for writing
+potassium result, `gemini-3.5-flash` returns T3, the tier reserved for writing
 to a clinical record, which is denied for every agent with no approval path. It
 was reading how serious the situation was rather than what the system would have
 to do about it. That single word would have made the entire critical-lab workflow
@@ -361,7 +360,7 @@ The short version:
 
 ## What was not built, and why
 
-### Agent Gateway — deliberately not used
+### Agent Gateway, deliberately not used
 
 Agent Gateway is the obvious component to reach for on this problem. It is in
 private preview and access was not available within the build window, and
@@ -380,8 +379,8 @@ by default with a deny list bolted on, and the difference only surfaces the day
 somebody adds a tool and forgets the rule.
 
 **T3 is evaluated before the allow list.** Every agent is refused a clinical
-write for the same reason, and that reason — this system has no clinical
-authority at all — is more useful than the "wrong department" answer the allow
+write for the same reason, and that reason, which is that this system has no clinical
+authority at all, is more useful than the "wrong department" answer the allow
 list would have produced.
 
 **The decision is an artefact, not an outcome.** Every call returns a decision
@@ -393,7 +392,7 @@ The enforcement point is also duplicated on purpose: each agent re-checks its ow
 allow list even though the coordinator already checked. A single gateway is a
 single place to be wrong.
 
-### Memory Bank — cut, and the rule it would have needed already holds
+### Memory Bank, cut, and the rule it would have needed already holds
 
 Advisory memory scoped to a role would be useful and is not load-bearing. The
 rule it would have had to obey is worth stating because the architecture already
@@ -402,14 +401,14 @@ an obligation closes.* A poisoned memory could at most cause a badly chosen
 notification channel. There is no code path from a remembered preference to a
 status change.
 
-### Google Chat, Calendar and Sheets — blocked by account type
+### Google Chat, Calendar and Sheets, blocked by account type
 
 Chat incoming webhooks require a Google Workspace account and this project runs
 on a consumer account. `services/engine/notify.py` ships three implementations
-behind one interface — `gmail`, `sheets`, `log` — so the channel is
+behind one interface, `gmail`, `sheets` and `log`, so the channel is
 configuration. Gmail is what runs.
 
-### Gemma triage — built, measured, switched off
+### Gemma triage, built, measured, switched off
 
 `services/triage` runs Gemma under Ollama with the model baked into the image,
 listening only on localhost so the classification never leaves the boundary. It
@@ -423,8 +422,8 @@ either model size, so the dangerous direction of error did not occur.
 
 ### Everything except re-identification is publicly reachable
 
-A deliberate trade. The public services hold no PHI — every identifier they
-handle is already a token — and the one service that can reverse a token is
+A deliberate trade. The public services hold no PHI, every identifier they
+handle is already a token, and the one service that can reverse a token is
 closed and reachable only by the board's identity. The Pub/Sub subscription and
 the Cloud Scheduler job already authenticate with OIDC, so closing the rest is a
 one-flag change rather than a rewrite.

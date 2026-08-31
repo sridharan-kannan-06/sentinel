@@ -39,7 +39,7 @@ export function TrustStrip({ trust }: { trust: Trust }) {
               : "var(--cds-support-success)",
           }}
         >
-          {gateOff ? "OFF — closing without proof" : "ON"}
+          {gateOff ? "OFF, closing without proof" : "ON"}
         </span>
       </div>
       <div className="trust-item">

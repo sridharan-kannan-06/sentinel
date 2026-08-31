@@ -149,8 +149,8 @@ work.
 | Latency, Cloud Run CPU | within 25 s | **~44 s** |
 
 The accuracy figure is not the interesting one. **Zero real obligations were
-labelled "none" at either model size.** The dangerous direction of error — a
-classifier deciding nothing needs doing — did not occur, and the fallback is
+labelled "none" at either model size.** The dangerous direction of error, a
+classifier deciding nothing needs doing, did not occur, and the fallback is
 biased towards creating work rather than suppressing it on purpose.
 
 The latency is what decided the design. Forty-four seconds per event is not
