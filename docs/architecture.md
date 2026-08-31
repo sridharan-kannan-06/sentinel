@@ -1,6 +1,6 @@
 # Architecture
 
-![Sentinel architecture](architecture.svg)
+![Sentinel architecture](architecture.png)
 
 The diagram above is the same system described below. If you only read one
 section, read [the three properties](#the-three-properties-everything-else-serves).
