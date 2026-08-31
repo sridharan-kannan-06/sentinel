@@ -16,16 +16,17 @@ obligation at 16:00*. Timers get lost, so a Cloud Scheduler sweep runs every
 fifteen minutes and re-derives every checkpoint from the obligation itself. The
 obligation is the source of truth; the timer never is.
 
-**The model may propose closure. Only an authoritative external fact may close.**
-`CLOSED` has exactly one legal predecessor in the state machine, and the only
-edge into it runs through the Evidence Gate, which is deterministic code with no
-model call inside it. This is enforced by a table and proved by a test, not by
-review.
+**Closure goes through deterministic evidence checks.** `CLOSED` has exactly one
+legal predecessor in the state machine, and the only edge into it runs through
+the Evidence Gate, which contains no model call. The gate validates submitted
+evidence fields against configured rules; it does not independently authenticate
+or query the source system.
 
-**The model never sees a patient.** Identifiers are replaced at the trust
-boundary before anything reaches Gemini. Tokenisation is deterministic, so the
-same person maps to the same token across weeks, which is what makes correlating
-a multi-day obligation possible without holding a name anywhere.
+**Selected identifiers are removed before the model path.** The ingest service
+tokenises identifiers found in event text before sending that text to Gemini.
+Tokenisation is deterministic, so the same person maps to the same token across
+weeks. Original values remain in the separate re-identification store. Caller
+supplied metadata is not exhaustively de-identified in this prototype.
 
 ---
 
@@ -33,22 +34,22 @@ a multi-day obligation possible without holding a name anywhere.
 
 ```mermaid
 flowchart TD
-    subgraph BOUNDARY["HOSPITAL TRUST BOUNDARY: raw text never leaves"]
+    subgraph BOUNDARY["INGEST BOUNDARY: selected identifiers removed before the model path"]
         SRC["HL7, insurer email, ops console, PDF<br/>names, MRNs, free text"]
         ING["<b>sentinel-ingest</b><br/>1 idempotency key claimed in a transaction<br/>2 Model Armor, whole and in 300-char windows<br/>3 Sensitive Data Protection, KMS-wrapped<br/>Meena Raghavan → PT-8119"]
         SRC --> ING
     end
 
-    ING -->|"tokens only"| PS["Pub/Sub raw-events"]
+    ING -->|"tokenised text and caller metadata"| PS["Pub/Sub raw-events"]
 
     subgraph ENGINE["sentinel-engine"]
         INT["<b>Interpreter</b>, ADK, gemini-3.5-flash<br/>no tools, proposes only"]
         COORD["<b>Coordinator</b>, ADK<br/>no tools, routes only"]
         POL["<b>Policy Engine</b><br/>deterministic, deny by default"]
-        LED["<b>Obligation Ledger</b> in Firestore<br/>transactional, version guarded, append-only"]
+        LED["<b>Obligation Ledger</b> in Firestore<br/>transactional, version guarded"]
         GATE["<b>Evidence Gate</b><br/>five checks, no model call"]
         INT --> LED
-        LED --> COORD
+        LED -->|"operator-triggered in this prototype"| COORD
         COORD --> POL
         GATE --> LED
     end
@@ -58,7 +59,7 @@ flowchart TD
     SWEEP["Cloud Scheduler<br/>15-minute sweep"] -->|"re-arms lost timers"| LED
 
     POL -->|ALLOW| FLEET
-    POL -->|ALLOW_WITH_APPROVAL| APR["Human approval queue<br/>exact payload, named human, mandatory reason"]
+    POL -->|ALLOW_WITH_APPROVAL| APR["Approval queue<br/>supplied reviewer and reason<br/>no automatic release"]
     POL -->|DENY| LED
 
     subgraph FLEET["Department fleet: one image, three identities"]
@@ -67,12 +68,11 @@ flowchart TD
         PATH["CarePathway<br/>SA sentinel-path"]
     end
 
-    FLEET --> MAIL["Real action: Gmail API"]
-    APR --> MAIL
-    MAIL --> GATE
+    FLEET --> ACT["Implemented internal actions"]
+    EXT["Evidence submitted by an external system or operator"] --> GATE
 
     LED --> WEB["<b>sentinel-web</b>: Continuity Board"]
-    WEB -.->|"authenticated human only"| REID["<b>sentinel-reid</b><br/>closed to the internet"]
+    WEB -.->|"board service identity"| REID["<b>sentinel-reid</b><br/>closed to the internet"]
 ```
 
 ---
@@ -104,7 +104,7 @@ stateDiagram-v2
     BLOCKED --> PENDING_EVIDENCE
 
     PENDING_EVIDENCE --> CLOSED: all five checks pass
-    PENDING_EVIDENCE --> OPEN: evidence refused
+    PENDING_EVIDENCE --> PENDING_EVIDENCE: evidence refused
 
     OPEN --> CANCELLED: human, reason required
     CLOSED --> [*]
@@ -145,18 +145,17 @@ reading the clinical seriousness of the subject rather than the authority the
 agent needs. T3 is a permanent denial with no approval path, so accepting that
 one word would have made the entire critical-lab workflow undischargeable.
 
-The tier that governs is derived in code from the obligation type. The model's
-suggestion is kept alongside and shown in the trust panel, because a disagreement
-between the two is worth looking at.
+The tier that governs is derived in code from the obligation type rather than
+taken from model output.
 
 ---
 
 ## Authority
 
-`policy/policy.yaml` is the whole authority model, as versioned data. Its hash is
-logged at boot, returned with every decision, and shown on every page of the
-board, so a decision recorded in the ledger can be tied to the exact
-configuration that produced it.
+`policy/policy.yaml` defines the prototype's authority model as versioned data.
+Its hash is logged at boot, returned with policy decisions, and shown on the
+board. The current implementation does not attach a complete policy snapshot to
+every ledger entry or provide tamper-evident audit storage.
 
 Deny by default, in three layers: an undeclared agent has no permissions, an
 undeclared action is refused, and a declared action outside that agent's allow
@@ -164,9 +163,9 @@ list is refused. Only then does the tier decide.
 
 | Tier | Example | Handling |
 |---|---|---|
-| T0 | internal notification, board update | automatic |
-| T1 | internal task, document request | automatic |
-| T2 | external email, claim submission, patient contact | **human approval** |
+| T0 | internal notification, board update | allowed without approval |
+| T1 | internal task, document request | allowed without approval |
+| T2 | external email, claim submission, patient contact | approval record; dispatch not implemented |
 | T3 | write a clinical record, express a clinical opinion | **denied, always** |
 
 T3 is checked **before** the allow list, deliberately. Every agent is refused a
@@ -190,7 +189,8 @@ metadata server, and refuses to start if they disagree.
 
 ## What closes an obligation
 
-Five deterministic checks in `policy/evidence.yaml`, all of which must pass:
+Five deterministic checks in `policy/evidence.yaml`, all of which must pass for
+the submitted evidence:
 
 1. the source is on the authoritative list **for this obligation type**
 2. an external reference id is present
@@ -198,9 +198,11 @@ Five deterministic checks in `policy/evidence.yaml`, all of which must pass:
 4. the subject token matches the obligation's subject
 5. the assertion describes the required evidence
 
-Measured against thirty samples: **0% false closure** for the gate, **16%** for
-the same corpus judged by `gemini-3.5-flash`. Both closed 100% of what genuinely
-qualified, so the gate is not merely refusing things. See
+On the thirty-sample fixture corpus, the gate produced **0% false closure** and
+`gemini-3.5-flash` produced **16%** on the same inputs. This evaluates the
+configured rules on a small hand-authored corpus; it is not a general safety or
+source-authenticity guarantee. Source, reference, timestamp and assertion values
+are supplied by the caller, and assertion matching is keyword-based. See
 [eval/RESULTS.md](../eval/RESULTS.md).
 
 `EVIDENCE_GATE=off` exists for the ablation. With it off the checks still run and
@@ -242,7 +244,9 @@ no closure in its vocabulary, one legal predecessor to `CLOSED`.
 | `sentinel-web` | `sentinel-web` | yes | Continuity Board |
 
 Every service is public except the one that can turn a token back into a name.
-The public ones hold nothing worth reading.
+This simplified the hackathon deployment, but the tokenised operational data can
+still be sensitive and some public engine endpoints can modify state. A
+production deployment would also authenticate service-to-service calls.
 
 The three agents are one image deployed three times. What differs is the service
 account and the `AGENT_ROLE` it declares. Three separate codebases would have
@@ -257,7 +261,7 @@ several directories would let it drift.
 
 ---
 
-## Things that cost hours and are written down so they cost nobody else any
+## Implementation notes
 
 **`gemini-3.5-flash` is served only from `location=global`.** Every other service
 in the project is regional. The regional endpoint returns a 404 saying the

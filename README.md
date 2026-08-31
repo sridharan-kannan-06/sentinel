@@ -2,11 +2,11 @@
 
 **Most agents react to events. Sentinel reacts to the absence of events.**
 
-An autonomous continuity layer for hospital operations. It watches for the work
-that *didn't* happen, works out who owes it, chases it across days, and refuses
-to close anything without proof.
+A hackathon prototype for tracking gaps in hospital operations. It watches for
+work that may not have happened, records who owns the next step, and follows the
+obligation until evidence is supplied.
 
-Built solo in eight days on Gemini 3.5 Flash, Google ADK and Google Cloud.
+Built solo in eight days using Gemini 3.5 Flash, Google ADK and Google Cloud.
 
 [Four-minute demo](docs/demo.mp4) | [Architecture](docs/architecture.md) | [Measured results](eval/RESULTS.md)
 
@@ -44,27 +44,35 @@ timer costs one sweep interval rather than the obligation.
 This was tested by deleting a live Cloud Task on purpose. The sweep caught it,
 re-armed it, and the obligation reached `AT_RISK` anyway.
 
-### 2. The model may propose closure. Only an authoritative external fact may close
+### 2. Closure goes through deterministic evidence checks
 
 `CLOSED` has exactly one legal predecessor in the state machine, and the only
 edge into it runs through the Evidence Gate, which is deterministic code with no
 model call inside it. `assert_closed_is_gated()` derives the predecessor set from the
 transition table at import and raises if it is ever anything else.
 
-Measured over thirty evidence samples: **0% false closure** for the gate, **16%**
-for the same corpus judged by `gemini-3.5-flash`.
+On the thirty-sample evaluation corpus, the gate produced **0% false closure**;
+`gemini-3.5-flash` produced **16%** on the same inputs. This is a small fixture
+test, not a general safety guarantee. The gate validates submitted evidence
+fields against configured rules; it does not independently query the source
+system.
 
-### 3. The model never sees a patient
+### 3. Identifiers are removed before the model path
 
-Identifiers are replaced at the trust boundary before anything reaches Gemini.
-`Meena Raghavan` becomes `PT-8119`, `Dr. Anil Kumar` becomes `DR-0385`.
+The ingest service replaces selected identifiers in event text before sending
+that text to Gemini. `Meena Raghavan` becomes `PT-8119`, `Dr. Anil Kumar`
+becomes `DR-0385`.
 Tokenisation is deterministic under a KMS-wrapped key, so the same person maps to
 the same token across weeks, which is what makes correlating a multi-day
-obligation possible without holding a name anywhere.
+obligation possible without sending the name down the model path. The original
+values are retained in the separate re-identification store so the board can
+reverse a token when needed.
 
-Only the de-identified text is ever persisted. Re-identification happens in one
-place, in a separate service that is the only one closed to the internet, for an
-authenticated caller, and is logged before it answers.
+Downstream services are intended to persist de-identified event text. Metadata is
+caller supplied and is not exhaustively de-identified, so the included fixtures
+keep it non-sensitive. Re-identification happens in a separate private service
+and each lookup is logged. The current board uses its service identity for these
+lookups; it does not provide individual user authentication.
 
 ---
 
@@ -110,25 +118,23 @@ real Cloud Tasks timers. The harness waits in real time.
 | Median time to detection | **5.6 s** after the deadline |
 | Range | 0.2 s to 11.1 s |
 
-**No status-quo baseline is claimed.** The honest comparison would be against how
-long the same lapse currently goes unnoticed in a real hospital, and no such
-measurement was obtained. Quoting a plausible "next morning ward round" figure
-would be fabricating the most important number on the page.
+There is no status-quo baseline. A useful comparison would be how long the same
+lapse currently goes unnoticed in a real hospital, and that was not measured.
+This run only reports the prototype's result on the twelve fixtures.
 
-### The Evidence Gate ablation
+### Evidence rules compared with model judgement
 
-Thirty samples, twenty-five of which should not close. Both arms see identical
-input.
+Thirty hand-authored samples, twenty-five of which should not close. Both arms
+see identical input.
 
-| | Evidence Gate | Model judgement |
+| | Configured rules | Model judgement |
 |---|---|---|
 | **False closure rate** | **0.0%** | **16.0%** |
 | True closure rate | 100% | 100% |
 
-Both closed everything that genuinely qualified, so the gate is not merely being
-conservative. The model's four failures were all one kind: whether a source is
-authoritative *for that obligation type*, and whether a timestamp falls inside
-the acceptance window. Judgements that need a rule rather than a reading.
+Within this corpus, both closed everything that qualified under the configured
+rules. The model's four failures concerned whether a source was allowed for that
+obligation type or whether a timestamp fell inside the acceptance window.
 
 ---
 
@@ -161,19 +167,15 @@ potassium result, `gemini-3.5-flash` returns T3, the tier reserved for writing
 to a clinical record, which is denied for every agent with no approval path. It
 was reading how serious the situation was rather than what the system would have
 to do about it. That single word would have made the entire critical-lab workflow
-permanently undischargeable. Risk tier is now derived in code from the obligation
-type, and the model's suggestion is kept only to be displayed. The same pattern
-appears three times in this system: the model proposes an SLA and code computes
-the dates, the model proposes a route and code decides whether it is permitted,
-the model proposes closure and code decides whether it happened.
+permanently undischargeable. The governing risk tier is therefore derived in
+code from the obligation type rather than taken from model output. The same
+boundary appears elsewhere: the model proposes an SLA and code computes the
+dates, while a proposed route still has to pass deterministic policy checks.
 
-**What is missing from this list is the hospital.** The intent was to ground the
-three workflows in six questions to working clinical staff about what actually
-gets forgotten. That did not happen inside the build window, so the workflows are
-modelled on documented failure modes rather than on anything a member of staff
-said. That limit is stated here rather than left for a reader to discover:
-presenting three plausible workflows as validated would be the one dishonest
-claim in the project.
+**Clinical validation was outside the build window.** The intent was to ground
+the three workflows in interviews with hospital staff. That did not happen, so
+the workflows are modelled on documented failure modes and should be treated as
+plausible prototypes rather than clinically validated workflows.
 
 ---
 
@@ -191,7 +193,7 @@ claim in the project.
 ### 1. Clone and authenticate
 
 ```bash
-git clone <this repository> sentinel
+git clone https://github.com/sridharan-kannan-06/sentinel.git sentinel
 cd sentinel
 gcloud auth login
 gcloud auth application-default login
@@ -338,14 +340,14 @@ script stages them.
 
 No network and no credentials required. The tests that matter assert properties
 rather than outputs: that `CLOSED` is reachable from exactly one state, that no
-agent can reach a T3 action, that screening always precedes de-identification,
-and that a blocked payload produces no forwardable result at all.
+agent can reach a T3 action, that screening precedes de-identification within the
+ingest pipeline, and that a blocked payload produces no forwardable result there.
 
 ---
 
-## Things that cost hours
+## Implementation notes
 
-Written down in [docs/architecture.md](docs/architecture.md#things-that-cost-hours-and-are-written-down-so-they-cost-nobody-else-any).
+Written down in [docs/architecture.md](docs/architecture.md#implementation-notes).
 The short version:
 
 - `gemini-3.5-flash` is served only from `location=global`, not from any region
@@ -383,10 +385,10 @@ write for the same reason, and that reason, which is that this system has no cli
 authority at all, is more useful than the "wrong department" answer the allow
 list would have produced.
 
-**The decision is an artefact, not an outcome.** Every call returns a decision
-id, the policy version, and the hash of the exact bytes that decided. Those land
-in the ledger, so a refusal recorded three days ago ties to the configuration in
-force at the time rather than to whatever the file says today.
+**The policy decision is inspectable.** Every call returns a decision id, the
+current policy version, and a hash of the policy bytes. The prototype exposes
+these values for inspection, but does not yet provide a tamper-evident historical
+record of every policy configuration.
 
 The enforcement point is also duplicated on purpose: each agent re-checks its own
 allow list even though the coordinator already checked. A single gateway is a
@@ -416,24 +418,25 @@ works, and `eval/triage_eval.py` measures it: 75% accurate at `gemma3:4b`, and
 about 44 seconds per classification on Cloud Run CPU.
 
 Forty-four seconds is not something a trust boundary can block for, so the code
-path ships disabled. `TRIAGE_URL` unset means ingest skips it. The accuracy
-figure that matters is not 75%: **zero real obligations were labelled "none"** at
-either model size, so the dangerous direction of error did not occur.
+path ships disabled. `TRIAGE_URL` unset means ingest skips it. In the sixteen-item
+evaluation, no real-work fixture was labelled `none` at either model size. This
+is a useful prototype result, but not a general miss-rate claim.
 
-### Everything except re-identification is publicly reachable
+### Public deployment trade-off
 
-A deliberate trade. The public services hold no PHI, every identifier they
-handle is already a token, and the one service that can reverse a token is
-closed and reachable only by the board's identity. The Pub/Sub subscription and
-the Cloud Scheduler job already authenticate with OIDC, so closing the rest is a
-one-flag change rather than a rewrite.
+For the hackathon deployment, every service except re-identification is publicly
+reachable. Those services are intended to receive tokenised text, but that data
+can still be operationally sensitive, and some engine endpoints can write state.
+The re-identification service is private and is called with the board's service
+identity rather than an individual user's identity. Pub/Sub and Cloud Scheduler
+already use OIDC; making every remaining service private would also require
+authenticated service-to-service calls.
 
-### Explicitly out of scope
+### Out of scope
 
-Multi-tenancy, authentication beyond two roles, a mobile app, voice, a chat
-interface, a graph visualisation library, an HL7 or FHIR parser beyond a single
-fixture, Kubernetes.
+Production-grade end-user authentication and authorisation, multi-tenancy, a
+mobile app, voice, a chat interface, a graph visualisation library, an HL7 or
+FHIR parser beyond a single fixture, and Kubernetes.
 
-The fixture set is twelve subjects rather than a hundred. A board showing a
-hundred fabricated workflows is the fastest way to lose a technical reader: the
-first hollow row anybody opens discredits every row above it.
+The fixture set contains twelve subjects. It demonstrates the workflows but is
+too small to support general performance claims.

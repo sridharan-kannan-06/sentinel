@@ -8,9 +8,10 @@ Reproduce with:
 python eval/replay.py --all
 ```
 
-Raw output is written to `eval/results.json`. Everything below came from that
-file. Nothing here has been rounded in the system's favour, and the fixtures were
-not adjusted after seeing any result.
+`eval/results.json` contains the raw detection run. The evidence comparison,
+prompt-injection check and Gemma triage measurements were separate runs described
+below; their raw outputs are not stored in that file. These are small prototype
+evaluations rather than clinical or production validation.
 
 ---
 
@@ -32,41 +33,41 @@ Detection means the breach checkpoint fired, the obligation moved to `BREACHED`,
 and the escalation ladder was notified. Nobody looked at a screen for this to
 happen.
 
-### What this does not measure
+### Limits
 
-**There is no status-quo baseline here, and one has not been invented.** The
-honest comparison would be against how long the same lapse currently goes
-unnoticed at a real hospital, and no such measurement was obtained. Quoting a
-plausible-sounding "next morning ward round" figure would be fabricating the most
-important number on the page. The absolute figure stands on its own: the system
-noticed twelve of twelve within eleven seconds.
+There is no status-quo baseline. A useful comparison would be how long the same
+lapse currently goes unnoticed in a real hospital, and that was not measured.
+This run only shows that the prototype noticed twelve of twelve fixture
+obligations within eleven seconds of their compressed deadlines.
 
 Ninety seconds is a compressed SLA chosen so the harness completes in minutes.
-The evidence that this holds across days is the canary, `OBL-a2ec59ecaf`, opened
-24 August and still running with real timers on 26, 28 and 30 August. That is a
-separate artefact from this table and is not folded into it.
+A separate canary, `OBL-a2ec59ecaf`, was opened on 24 August and observed with
+real timers on 26, 28 and 30 August. That observation is not included in
+`eval/results.json` or the table above.
 
 Twelve is a small denominator. It is stated rather than hidden.
 
 ---
 
-## 2. Ablation: the Evidence Gate against model judgement
+## 2. Evidence rules compared with model judgement
 
-Thirty evidence samples across the five obligation types. Five should close their
-obligation; twenty-five should not. Ground truth follows from the five rules in
-`policy/evidence.yaml`, which were written before the corpus existed.
+Thirty hand-authored evidence samples cover the five obligation types. Five are
+labelled to close their obligation and twenty-five are not. The labels follow the
+five rules in `policy/evidence.yaml`, so this measures conformance to those rules,
+not independent clinical correctness.
 
-Both arms see identical input. One arm is the deterministic gate. The other is
-`gemini-3.5-flash` asked whether the obligation is discharged, which is what the
-system falls back to when `EVIDENCE_GATE` is off.
+Both arms see identical input. One uses the deterministic checks and the other
+asks `gemini-3.5-flash` whether the obligation is discharged. This is an
+evaluation comparison: the application's `EVIDENCE_GATE=off` setting ignores the
+gate verdict and does not call Gemini as a runtime fallback.
 
-| | Evidence Gate | Model judgement |
+| | Configured rules | Model judgement |
 |---|---|---|
 | **False closure rate** (of 25 that should not close) | **0.0%** | **16.0%** |
 | True closure rate (of 5 that should close) | 100% | 100% |
 
-Both arms closed everything that genuinely qualified, so the gate is not simply
-being conservative. The difference is entirely in what they let through.
+Both arms accepted all five positive samples. On the twenty-five negative
+samples, the model accepted four that did not meet the configured rules.
 
 ### The four the model closed and should not have
 
@@ -83,20 +84,17 @@ described something else. What it missed were the judgements that need a rule
 rather than a reading: whether a source is authoritative for this particular
 obligation type, and whether a timestamp falls inside the acceptance window.
 
-### What this does not measure
+### Limits
 
 This is one prompt. A longer prompt, or a model asked to justify itself first,
 would very likely score better, and no claim is made that 16% is the floor for
 what a model can do here.
 
-The argument is not that the model is bad. Eighty-four percent correct on the
-negatives is better than expected. The argument is that "usually right" is the
-wrong property for the step that decides whether a hospital obligation is
-finished, and that the failures are concentrated exactly where a deterministic
-rule is cheap to write and a model has nothing to reason from.
-
-Thirty samples is small. The corpus is in `eval/corpus.py` and each sample
-carries the reason it is what it is.
+Thirty samples is small, and the labels come from the same policy rules being
+tested. The corpus also does not test whether caller identities, source names or
+external references are genuine, and its keyword assertion check is not a
+semantic verifier. The corpus is in `eval/corpus.py` and each sample includes its
+expected result and reason.
 
 ---
 
@@ -124,14 +122,11 @@ The boundary now screens long documents whole and again in overlapping windows.
 That is a mitigation, not a guarantee: an injection spread thinly enough would
 still pass.
 
-So the system does not rely on it. When the injection was fed directly to the
-interpreter with screening bypassed, the model did not attempt to close anything.
-It produced an ordinary pre-authorisation obligation requiring the consultant's
-note that the letter was genuinely asking for. It kept chasing the real document.
-
-That is structural rather than lucky. The interpreter holds no tools, closure is
-not in its vocabulary, no agent can request closure as an action, and `CLOSED`
-has exactly one legal predecessor in the state machine.
+When this injection was fed directly to the interpreter with screening bypassed,
+the model produced an ordinary pre-authorisation obligation for the consultant's
+note instead of attempting closure. This is one fixture, not a general injection
+success rate. The impact is limited by the interpreter having no tools and by
+`CLOSED` being reachable through one state-machine path.
 
 ---
 
@@ -148,10 +143,10 @@ work.
 | Noise labelled as work | 1 | **0** |
 | Latency, Cloud Run CPU | within 25 s | **~44 s** |
 
-The accuracy figure is not the interesting one. **Zero real obligations were
-labelled "none" at either model size.** The dangerous direction of error, a
-classifier deciding nothing needs doing, did not occur, and the fallback is
-biased towards creating work rather than suppressing it on purpose.
+In this sixteen-item corpus, **no fixture representing real work was labelled
+`none`** at either model size. The fallback is intentionally biased toward
+creating work rather than suppressing it, so this should not be read as a general
+miss-rate measurement.
 
 The latency is what decided the design. Forty-four seconds per event is not
 something a trust boundary can block for, so the code path ships switched off.
@@ -167,12 +162,9 @@ triage {"domain": "revenue", "creates_obligation": true, "model": "gemma3:4b", "
 
 ### A measurement error worth recording
 
-The first `gemma3:4b` run reported **100%**, and it was wrong. Four of the sixteen
-calls had timed out and silently taken the fallback label, which happened to be
-correct for those four. The classifier was being credited for answers it never
-gave.
+The first `gemma3:4b` run reported **100%**, but four of the sixteen calls had
+timed out and silently taken the fallback label. Those fallback answers happened
+to be correct and were initially credited to the classifier.
 
-A fallback now sets `degraded`, and the harness refuses to count a degraded result
-as correct. The true figure is 75%. It is a small bug of exactly the kind that
-turns an evaluation into a press release, and it was only visible because the raw
-model output was printed alongside the verdict.
+A fallback now sets `degraded`, and the harness does not count a degraded result
+as correct. The corrected figure is 75%.
