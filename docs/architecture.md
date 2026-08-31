@@ -224,7 +224,7 @@ The boundary therefore screens long documents whole and again in overlapping
 windows. That is a mitigation and not a guarantee, which is why it is not what
 the system relies on. Fed the injection with screening bypassed, the interpreter
 produced an ordinary pre-authorisation obligation for the consultant's note the
-letter was genuinely asking for — it kept chasing the real document. No tools,
+letter was genuinely asking for, and it kept chasing the real document. No tools,
 no closure in its vocabulary, one legal predecessor to `CLOSED`.
 
 ---
