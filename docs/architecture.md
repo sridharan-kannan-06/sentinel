@@ -33,19 +33,19 @@ a multi-day obligation possible without holding a name anywhere.
 
 ```mermaid
 flowchart TD
-    subgraph BOUNDARY["HOSPITAL TRUST BOUNDARY — raw text never leaves"]
-        SRC["HL7 · insurer email · ops console · PDF<br/>names, MRNs, free text"]
+    subgraph BOUNDARY["HOSPITAL TRUST BOUNDARY: raw text never leaves"]
+        SRC["HL7, insurer email, ops console, PDF<br/>names, MRNs, free text"]
         ING["<b>sentinel-ingest</b><br/>1 idempotency key claimed in a transaction<br/>2 Model Armor, whole and in 300-char windows<br/>3 Sensitive Data Protection, KMS-wrapped<br/>Meena Raghavan → PT-8119"]
         SRC --> ING
     end
 
-    ING -->|"tokens only"| PS["Pub/Sub · raw-events"]
+    ING -->|"tokens only"| PS["Pub/Sub raw-events"]
 
     subgraph ENGINE["sentinel-engine"]
-        INT["<b>Interpreter</b> · ADK · gemini-3.5-flash<br/>no tools, proposes only"]
-        COORD["<b>Coordinator</b> · ADK<br/>no tools, routes only"]
+        INT["<b>Interpreter</b>, ADK, gemini-3.5-flash<br/>no tools, proposes only"]
+        COORD["<b>Coordinator</b>, ADK<br/>no tools, routes only"]
         POL["<b>Policy Engine</b><br/>deterministic, deny by default"]
-        LED["<b>Obligation Ledger</b> · Firestore<br/>transactional, version guarded, append-only"]
+        LED["<b>Obligation Ledger</b> in Firestore<br/>transactional, version guarded, append-only"]
         GATE["<b>Evidence Gate</b><br/>five checks, no model call"]
         INT --> LED
         LED --> COORD
@@ -61,17 +61,17 @@ flowchart TD
     POL -->|ALLOW_WITH_APPROVAL| APR["Human approval queue<br/>exact payload, named human, mandatory reason"]
     POL -->|DENY| LED
 
-    subgraph FLEET["Department fleet — one image, three identities"]
+    subgraph FLEET["Department fleet: one image, three identities"]
         CLIN["ClinicalFollowUp<br/>SA sentinel-clin"]
         REV["RevenueCycle<br/>SA sentinel-rev"]
         PATH["CarePathway<br/>SA sentinel-path"]
     end
 
-    FLEET --> MAIL["Real action · Gmail API"]
+    FLEET --> MAIL["Real action: Gmail API"]
     APR --> MAIL
     MAIL --> GATE
 
-    LED --> WEB["<b>sentinel-web</b> · Continuity Board"]
+    LED --> WEB["<b>sentinel-web</b>: Continuity Board"]
     WEB -.->|"authenticated human only"| REID["<b>sentinel-reid</b><br/>closed to the internet"]
 ```
 
